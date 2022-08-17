@@ -1,0 +1,51 @@
+{
+    "name": "daycry/jwt",
+    "description": "JWT Token for Codeigniter 4",
+    "homepage": "https://github.com/daycry/jwt",
+    "authors":
+    [
+        {
+            "name": "daycry",
+            "homepage": "https://github.com/daycry",
+            "role": "Developer"
+        }
+    ],
+    "license": "MIT",
+    "require": {
+      "php": ">=7.4 || ^8.0",
+        "lcobucci/jwt": "^4"
+    },
+    "require-dev":
+    {
+        "phpunit/phpunit": "^9.1",
+        "codeigniter4/framework": "^4",
+        "friendsofphp/php-cs-fixer": "3.6.*",
+        "mikey179/vfsstream": "^1.6",
+        "nexusphp/cs-config": "^3.3",
+        "nexusphp/tachycardia": "^1.0",
+        "phpstan/phpstan": "^1.7.1",
+        "rector/rector": "0.13.9"
+    },
+    "autoload":
+    {
+        "psr-4": {
+            "Daycry\\JWT\\": "src/"
+        },
+        "exclude-from-classmap": [
+            "**/Database/Migrations/**"
+        ]
+    },
+    "autoload-dev":
+    {
+        "psr-4":
+        {
+            "Tests\\": "tests/",
+            "Tests\\Support\\": "tests/_support"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "cs-fixer": "vendor/bin/php-cs-fixer fix src",
+        "cs-fixer-tests": "vendor/bin/php-cs-fixer fix tests"
+    }
+}
