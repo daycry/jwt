@@ -6,7 +6,7 @@ use Config\Autoload;
 use CodeIgniter\CLI\CLI;
 use CodeIgniter\CLI\BaseCommand;
 
-class RestServerPublish extends BaseCommand
+class JWTPublish extends BaseCommand
 {
     protected $group       = 'JWT';
     protected $name        = 'jwt:publish';
