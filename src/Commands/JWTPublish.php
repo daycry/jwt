@@ -1,6 +1,6 @@
 <?php
 
-namespace Daycry\RestServer\Commands;
+namespace Daycry\JWT\Commands;
 
 use Config\Autoload;
 use CodeIgniter\CLI\CLI;
