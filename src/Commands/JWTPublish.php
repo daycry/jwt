@@ -1,12 +1,12 @@
 <?php
 
-namespace Daycry\RestServer\Commands;
+namespace Daycry\JWT\Commands;
 
 use Config\Autoload;
 use CodeIgniter\CLI\CLI;
 use CodeIgniter\CLI\BaseCommand;
 
-class RestServerPublish extends BaseCommand
+class JWTPublish extends BaseCommand
 {
     protected $group       = 'JWT';
     protected $name        = 'jwt:publish';
