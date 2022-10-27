@@ -120,14 +120,18 @@ class JWT
 
         try {
 
-            $this->configuration->setValidationConstraints(
+            $constraints = [
                 new SignedWith($this->configuration->signer(), $this->configuration->signingKey()),
                 new IssuedBy($this->JWTConfig->issuer),
                 new ValidAt($clock),
                 new IdentifiedBy($this->JWTConfig->identifier),
                 new PermittedFor($this->JWTConfig->audience)
-            );
-        } catch (RequiredConstraintsViolated  $e) {
+            ];
+
+            $this->configuration->validator()->assert($token, ...$constraints);
+
+        } catch (RequiredConstraintsViolated $e) {
+
             if( $this->JWTConfig->throwable )
             {
                 throw $e;
