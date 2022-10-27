@@ -5,9 +5,15 @@ namespace Daycry\JWT;
 use CodeIgniter\Config\BaseConfig;
 
 use Lcobucci\JWT\Configuration;
-use Lcobucci\JWT\UnencryptedToken;
-use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
+//use Lcobucci\JWT\UnencryptedToken;
 use Lcobucci\JWT\Signer\Key\InMemory;
+
+use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
+use Lcobucci\JWT\Validation\Constraint\IssuedBy;
+use Lcobucci\JWT\Validation\Constraint\SignedWith;
+use Lcobucci\JWT\Validation\Constraint\ValidAt;
+use Lcobucci\JWT\Validation\Constraint\IdentifiedBy;
+use Lcobucci\JWT\Validation\Constraint\PermittedFor;
 
 class JWT
 {
@@ -109,18 +115,18 @@ class JWT
     public function decode($data)
     {
         $token = $this->configuration->parser()->parse($data);
-        assert($token instanceof UnencryptedToken);
 
         $clock = new \Lcobucci\Clock\FrozenClock(new \DateTimeImmutable());
 
-        $constraints = [
-            new \Lcobucci\JWT\Validation\Constraint\StrictValidAt($clock),
-            new \Lcobucci\JWT\Validation\Constraint\IdentifiedBy($this->JWTConfig->identifier),
-            new \Lcobucci\JWT\Validation\Constraint\PermittedFor($this->JWTConfig->audience)
-        ];
-
         try {
-            $this->configuration->validator()->assert($token, ...$constraints);
+
+            $this->configuration->setValidationConstraints(
+                new SignedWith($this->configuration->signer(), $this->configuration->signingKey()),
+                new IssuedBy($this->JWTConfig->issuer),
+                new ValidAt($clock),
+                new IdentifiedBy($this->JWTConfig->identifier),
+                new PermittedFor($this->JWTConfig->audience)
+            );
         } catch (RequiredConstraintsViolated  $e) {
             if( $this->JWTConfig->throwable )
             {
