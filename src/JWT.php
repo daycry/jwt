@@ -87,6 +87,8 @@ class JWT
             $token->withClaim($this->paramData, $data);
         }
 
+        $uid = ($uid !== null ) ? $uid : $this->JWTConfig->uid;
+
         // Configures a new claim, called "uid"
         if ($uid) {
             $token->withClaim('uid', $uid);

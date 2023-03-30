@@ -7,6 +7,12 @@ use CodeIgniter\Config\BaseConfig;
 class JWT extends BaseConfig
 {
     /**
+     * UID field for Bearer Token
+     * You can set with dinamically values passing as second parameter in encode function
+     * ex: 'myApp'
+     */
+    public $uid = null;
+    /**
      * In Base64 encode
      */
     public $signer = 'mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw=';

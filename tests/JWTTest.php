@@ -15,6 +15,7 @@ class JWTTest extends CIUnitTestCase
         parent::setUp();
 
         $this->config = config('JWT');
+        $this->config->uid = "myUid";
         $this->library = new \Daycry\JWT\JWT($this->config);
     }
 
@@ -28,6 +29,29 @@ class JWTTest extends CIUnitTestCase
         $this->assertEquals($message, $decode->get('data'));
     }
 
+    public function testJWTEncodeStringWithCustomUid()
+    {
+        $message = 'hello';
+        $uid = 'custom';
+        $encode = $this->library->encode($message, $uid);
+
+        $decode = $this->library->decode($encode);
+
+        $this->assertEquals($message, $decode->get('data'));
+        $this->assertEquals($uid, $decode->get('uid'));
+    }
+
+    public function testJWTEncodeStringWithUid()
+    {
+        $message = 'hello';
+        $encode = $this->library->encode($message);
+
+        $decode = $this->library->decode($encode);
+
+        $this->assertEquals($message, $decode->get('data'));
+        $this->assertEquals($this->config->uid, $decode->get('uid'));
+    }
+
     public function testJWTEncodeStringDefaultConfig()
     {
         $this->library = new \Daycry\JWT\JWT();
@@ -37,19 +61,6 @@ class JWTTest extends CIUnitTestCase
         $decode = $this->library->decode($encode);
 
         $this->assertEquals($message, $decode->get('data'));
-    }
-
-    public function testJWTEncodeStringWithUid()
-    {
-        $this->library->setParamData('myDada');
-        $message = 'hello';
-        $uid = 12;
-        $encode = $this->library->encode($message, $uid);
-
-        $decode = $this->library->decode($encode);
-
-        $this->assertEquals($message, $decode->get('myDada'));
-        $this->assertEquals($uid, $decode->get('uid'));
     }
 
     public function testJWTEncodeArrayWithoutSplit()
