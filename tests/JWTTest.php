@@ -3,12 +3,13 @@
 namespace Tests\Validators;
 
 use CodeIgniter\Test\CIUnitTestCase;
-use Codeigniter\Config\BaseConfig;
+use Daycry\JWT\Config\JWT as JWTConfig;
+use Daycry\JWT\JWT;
 
 class JWTTest extends CIUnitTestCase
 {
-    protected BaseConfig $config;
-    protected \Daycry\JWT\JWT $library;
+    protected JWTConfig $config;
+    protected JWT $library;
 
     protected function setUp(): void
     {

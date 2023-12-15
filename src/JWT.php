@@ -2,42 +2,39 @@
 
 namespace Daycry\JWT;
 
-use CodeIgniter\Config\BaseConfig;
-
 use Lcobucci\JWT\Configuration;
-//use Lcobucci\JWT\UnencryptedToken;
 use Lcobucci\JWT\Signer\Key\InMemory;
-
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 use Lcobucci\JWT\Validation\Constraint\IssuedBy;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Lcobucci\JWT\Validation\Constraint\ValidAt;
 use Lcobucci\JWT\Validation\Constraint\IdentifiedBy;
 use Lcobucci\JWT\Validation\Constraint\PermittedFor;
+use Daycry\JWT\Config\JWT as JWTConfig;
+use Lcobucci\Clock\FrozenClock;
+use Lcobucci\JWT\Token\DataSet;
+use Lcobucci\JWT\Token\Plain;
 
 class JWT
 {
-    /**
-     * JWT Config
-     */
-    private $JWTConfig = null;
+    private ?JWTConfig $JWTConfig = null;
 
     /**
      * Configuration Class
      */
-    private $configuration = null;
+    private ?Configuration $configuration = null;
 
     /**
      * Split data if array
      */
-    private $split = false;
+    private bool $split = false;
 
     /**
      * Name of attribute of data
      */
-    private $paramData = 'data';
+    private string $paramData = 'data';
 
-    public function __construct(BaseConfig $config = null)
+    public function __construct(JWTConfig $config = null)
     {
         $this->JWTConfig = $config;
 
@@ -114,11 +111,12 @@ class JWT
         return $token->toString();
     }
 
-    public function decode($data)
+    public function decode($data): DataSet|RequiredConstraintsViolated
     {
+        /** @var Plain $token */
         $token = $this->configuration->parser()->parse($data);
 
-        $clock = new \Lcobucci\Clock\FrozenClock(new \DateTimeImmutable());
+        $clock = new FrozenClock(new \DateTimeImmutable());
 
         try {
 
