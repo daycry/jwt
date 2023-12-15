@@ -48,6 +48,11 @@ class JWT
         );
     }
 
+    public function getParamData()
+    {
+        return $this->paramData;
+    }
+
     /**
      * Set the attibute to data claim
      * Used if data is not an array
