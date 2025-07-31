@@ -5,6 +5,8 @@ namespace Tests\Validators;
 use CodeIgniter\Test\CIUnitTestCase;
 use Daycry\JWT\Config\JWT as JWTConfig;
 use Daycry\JWT\JWT;
+use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
+
 
 class JWTTest extends CIUnitTestCase
 {
@@ -17,7 +19,14 @@ class JWTTest extends CIUnitTestCase
 
         $this->config = config('JWT');
         $this->config->uid = "myUid";
-        $this->library = new \Daycry\JWT\JWT($this->config);
+        // Remove ValidAt constraint to avoid timing issues in tests
+        $this->config->validateClaims = [
+            'SignedWith',
+            'IssuedBy', 
+            'IdentifiedBy',
+            'PermittedFor',
+        ];
+        $this->library = new JWT($this->config);
     }
 
     public function testJWTEncodeString()
@@ -55,7 +64,7 @@ class JWTTest extends CIUnitTestCase
 
     public function testJWTEncodeStringDefaultConfig()
     {
-        $this->library = new \Daycry\JWT\JWT();
+        $this->library = new JWT();
         $message = 'hello';
         $encode = $this->library->encode($message);
 
@@ -92,14 +101,14 @@ class JWTTest extends CIUnitTestCase
 
     public function testJWTDecodeErrorThowable()
     {
-        $this->expectException( \Lcobucci\JWT\Validation\RequiredConstraintsViolated::class );
+        $this->expectException( RequiredConstraintsViolated::class );
 
         $message = 'hello';
         $encode = $this->library->encode($message);
 
         $this->config = config('JWT');
         $this->config->identifier = 'another';
-        $this->library = new \Daycry\JWT\JWT($this->config);
+        $this->library = new JWT($this->config);
 
         $decode = $this->library->decode($encode);
     }
@@ -112,11 +121,64 @@ class JWTTest extends CIUnitTestCase
         $this->config = config('JWT');
         $this->config->identifier = 'another';
         $this->config->throwable = false;
-        $this->library = new \Daycry\JWT\JWT($this->config);
+        $this->library = new JWT($this->config);
 
         $decode = $this->library->decode($encode);
 
         $this->assertMatchesRegularExpression('/The token violates/i', $decode->getMessage());
+    }
+
+    public function testJWTValidationConstraints()
+    {
+        $message = 'test validation';
+        $encode = $this->library->encode($message);
+
+        // Test that all default validation constraints work
+        $this->config->validateClaims = [
+            'SignedWith',
+            'IssuedBy', 
+            'ValidAt',
+            'IdentifiedBy',
+            'PermittedFor',
+        ];
+        $this->config->validate = true;
+        
+        $library = new JWT($this->config);
+        $decode = $library->decode($encode);
+
+        $this->assertEquals($message, $decode->get('data'));
+    }
+
+    public function testJWTValidationDisabled()
+    {
+        $message = 'test no validation';
+        $encode = $this->library->encode($message);
+
+        // Test that validation can be disabled
+        $this->config->validate = false;
+        
+        $library = new JWT($this->config);
+        $decode = $library->decode($encode);
+
+        $this->assertEquals($message, $decode->get('data'));
+    }
+
+    public function testJWTPartialValidationConstraints()
+    {
+        $message = 'test partial validation';
+        $encode = $this->library->encode($message);
+
+        // Test with only some constraints
+        $this->config->validateClaims = [
+            'SignedWith',
+            'ValidAt',
+        ];
+        $this->config->validate = true;
+        
+        $library = new JWT($this->config);
+        $decode = $library->decode($encode);
+
+        $this->assertEquals($message, $decode->get('data'));
     }
 
     protected function tearDown(): void
