@@ -4,6 +4,7 @@ namespace Tests\Commands;
 
 use CodeIgniter\Test\CIUnitTestCase;
 use Daycry\JWT\Commands\JWTGenerateKey;
+use PHPUnit\Framework\Attributes\Depends;
 use ReflectionClass;
 
 /**
@@ -50,9 +51,7 @@ class JWTGenerateKeyActualTest extends CIUnitTestCase
         return $command;
     }
     
-    /**
-     * @depends testCommandInstantiation
-     */
+    #[Depends('testCommandInstantiation')]
     public function testRunMethodWithValidLength($command)
     {
         // This will exercise the run method code path
@@ -69,9 +68,7 @@ class JWTGenerateKeyActualTest extends CIUnitTestCase
         $this->assertTrue(true, 'Run method was called successfully');
     }
     
-    /**
-     * @depends testCommandInstantiation  
-     */
+    #[Depends('testCommandInstantiation')]
     public function testRunMethodWithInvalidLength($command)
     {
         // This will exercise the error handling code path
@@ -87,9 +84,7 @@ class JWTGenerateKeyActualTest extends CIUnitTestCase
         $this->assertTrue(true, 'Run method error handling was exercised');
     }
     
-    /**
-     * @depends testCommandInstantiation
-     */
+    #[Depends('testCommandInstantiation')]
     public function testRunMethodWithForceFlag($command)
     {
         // This will exercise the force flag code path
@@ -105,9 +100,7 @@ class JWTGenerateKeyActualTest extends CIUnitTestCase
         $this->assertTrue(true, 'Force flag code path was exercised');
     }
     
-    /**
-     * @depends testCommandInstantiation
-     */
+    #[Depends('testCommandInstantiation')]
     public function testRunMethodWithDifferentLengths($command)
     {
         // Exercise multiple code paths with different lengths
