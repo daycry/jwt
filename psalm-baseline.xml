@@ -37,10 +37,6 @@
     </UndefinedConstant>
   </file>
   <file src="src/JWT.php">
-    <UndefinedClass>
-      <code><![CDATA[LocalFileReference]]></code>
-      <code><![CDATA[LocalFileReference]]></code>
-    </UndefinedClass>
     <UndefinedFunction>
       <code><![CDATA[config('JWT')]]></code>
     </UndefinedFunction>
