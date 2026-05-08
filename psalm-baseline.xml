@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<files psalm-version="6.16.1@f1f5de594dc76faf8784e02d3dc4716c91c6f6ac">
+  <file src="src/Commands/JWTGenerateKey.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function run(array $params)]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedConstant>
+      <code><![CDATA[ROOTPATH]]></code>
+      <code><![CDATA[ROOTPATH]]></code>
+    </UndefinedConstant>
+  </file>
+  <file src="src/Commands/JWTKeyPair.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function run(array $params): int]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedConstant>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_SUCCESS]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
+      <code><![CDATA[WRITEPATH]]></code>
+    </UndefinedConstant>
+  </file>
+  <file src="src/Commands/JWTPublish.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function run(array $params): int]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedClass>
+      <code><![CDATA[Autoload]]></code>
+    </UndefinedClass>
+    <UndefinedConstant>
+      <code><![CDATA[APP_NAMESPACE]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_SUCCESS]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
+    </UndefinedConstant>
+  </file>
+  <file src="src/JWT.php">
+    <UndefinedClass>
+      <code><![CDATA[LocalFileReference]]></code>
+      <code><![CDATA[LocalFileReference]]></code>
+    </UndefinedClass>
+    <UndefinedFunction>
+      <code><![CDATA[config('JWT')]]></code>
+    </UndefinedFunction>
+  </file>
+  <file src="tests/Commands/JWTGenerateKeyTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+      <code><![CDATA[protected function tearDown(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedClass>
+      <code><![CDATA[LoggerConfig]]></code>
+    </UndefinedClass>
+  </file>
+  <file src="tests/Commands/JWTKeyPairTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+      <code><![CDATA[protected function tearDown(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedClass>
+      <code><![CDATA[LoggerConfig]]></code>
+    </UndefinedClass>
+  </file>
+  <file src="tests/Commands/JWTPublishTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+      <code><![CDATA[protected function tearDown(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedClass>
+      <code><![CDATA[Autoload]]></code>
+    </UndefinedClass>
+    <UndefinedConstant>
+      <code><![CDATA[APP_NAMESPACE]]></code>
+    </UndefinedConstant>
+    <UndefinedFunction>
+      <code><![CDATA[command('jwt:publish')]]></code>
+      <code><![CDATA[command('jwt:publish')]]></code>
+    </UndefinedFunction>
+  </file>
+  <file src="tests/Performance/JWTPerformanceTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedFunction>
+      <code><![CDATA[config('JWT')]]></code>
+    </UndefinedFunction>
+  </file>
+  <file src="tests/Validators/AsymmetricTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+      <code><![CDATA[protected function tearDown(): void]]></code>
+    </MissingOverrideAttribute>
+  </file>
+  <file src="tests/Validators/JWTTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedFunction>
+      <code><![CDATA[config('JWT')]]></code>
+    </UndefinedFunction>
+  </file>
+  <file src="tests/Validators/SecurityTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedFunction>
+      <code><![CDATA[config('JWT')]]></code>
+    </UndefinedFunction>
+  </file>
+</files>

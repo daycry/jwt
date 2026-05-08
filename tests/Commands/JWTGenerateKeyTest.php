@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Commands;
 
 use CodeIgniter\CLI\CLI;
@@ -19,7 +21,9 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
 {
     use StreamFilterTrait;
 
-    /** @var mixed[] */
+    /**
+     * @var list<mixed>
+     */
     private array $originalOptions = [];
 
     protected function setUp(): void
@@ -39,7 +43,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
     }
 
     /**
-     * @param mixed[] $options
+     * @param list<mixed> $options
      */
     private function setCliOptions(array $options): void
     {
@@ -48,8 +52,8 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
     }
 
     /**
-     * @param string[] $params
-     * @param mixed[]  $options
+     * @param list<string> $params
+     * @param list<mixed>  $options
      */
     private function runCommand(array $params, array $options = []): string
     {
@@ -105,7 +109,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
 
         $this->assertSame('JWT', $properties['group']);
         $this->assertSame('jwt:key', $properties['name']);
-        $this->assertStringContainsString('Generate a secure JWT signing key', $properties['description']);
+        $this->assertStringContainsString('Generate a secure JWT signing key', (string) $properties['description']);
         $this->assertArrayHasKey('--show', $properties['options']);
         $this->assertArrayHasKey('--force', $properties['options']);
     }

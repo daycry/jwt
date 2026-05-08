@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Validators;
 
 use CodeIgniter\Test\CIUnitTestCase;
 use Daycry\JWT\Config\JWT as JWTConfig;
 use Daycry\JWT\Exceptions\InvalidTokenException;
 use Daycry\JWT\JWT;
+use InvalidArgumentException;
 use Lcobucci\JWT\Token\Plain;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 
@@ -105,7 +108,7 @@ final class JWTTest extends CIUnitTestCase
         $this->config->identifier = 'another';
         $verifier                 = new JWT($this->config);
 
-        $this->assertNull($verifier->tryDecode($token));
+        $this->assertNotInstanceOf(Plain::class, $verifier->tryDecode($token));
     }
 
     public function testJWTValidationConstraintsAllPass(): void
@@ -165,13 +168,13 @@ final class JWTTest extends CIUnitTestCase
 
     public function testWithLeewayRejectsNegativeValues(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $this->library->withLeeway(-1);
     }
 
     public function testWithParamDataRejectsEmptyName(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $this->library->withParamData('');
     }
 

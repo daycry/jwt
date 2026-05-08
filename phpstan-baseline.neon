@@ -121,8 +121,20 @@ parameters:
 			path: src/JWT.php
 
 		-
+			message: '#^Parameter \#2 \$options of method Tests\\Commands\\JWTGenerateKeyTest\:\:runCommand\(\) expects list\<mixed\>, array\{show\: null\} given\.$#'
+			identifier: argument.type
+			count: 5
+			path: tests/Commands/JWTGenerateKeyTest.php
+
+		-
 			message: '#^Method Tests\\Commands\\JWTKeyPairTest\:\:runCommand\(\) has parameter \$options with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Commands/JWTKeyPairTest.php
+
+		-
+			message: '#^Parameter \#1 \$options of method Tests\\Commands\\JWTKeyPairTest\:\:setCliOptions\(\) expects list\<mixed\>, array given\.$#'
+			identifier: argument.type
 			count: 1
 			path: tests/Commands/JWTKeyPairTest.php
 
@@ -131,18 +143,6 @@ parameters:
 			identifier: ternary.shortNotAllowed
 			count: 1
 			path: tests/Commands/JWTKeyPairTest.php
-
-		-
-			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringContainsString\(\) expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 2
-			path: tests/Commands/JWTPublishTest.php
-
-		-
-			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringNotContainsString\(\) expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 2
-			path: tests/Commands/JWTPublishTest.php
 
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'

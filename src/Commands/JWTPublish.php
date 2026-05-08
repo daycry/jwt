@@ -10,10 +10,9 @@ use Throwable;
 
 class JWTPublish extends BaseCommand
 {
-    protected $group       = 'JWT';
-    protected $name        = 'jwt:publish';
-    protected $description = 'JWT config file publisher.';
-
+    protected $group             = 'JWT';
+    protected $name              = 'jwt:publish';
+    protected $description       = 'JWT config file publisher.';
     protected string $sourcePath = '';
 
     public function run(array $params): int

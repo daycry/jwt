@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Commands;
 
 use CodeIgniter\CLI\CLI;
@@ -18,15 +20,18 @@ final class JWTKeyPairTest extends CIUnitTestCase
 {
     use StreamFilterTrait;
 
-    /** @var mixed[] */
+    /**
+     * @var list<mixed>
+     */
     private array $originalOptions = [];
-    private ?string $tmpDir        = null;
+
+    private ?string $tmpDir = null;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        if (! self::opensslIsUsable()) {
+        if (! $this->opensslIsUsable()) {
             $this->markTestSkipped('OpenSSL pkey functions are not available (missing openssl.cnf?).');
         }
 
@@ -36,7 +41,7 @@ final class JWTKeyPairTest extends CIUnitTestCase
         $this->tmpDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'jwt-keypair-test-' . uniqid();
     }
 
-    private static function opensslIsUsable(): bool
+    private function opensslIsUsable(): bool
     {
         $resource = @openssl_pkey_new([
             'private_key_type' => OPENSSL_KEYTYPE_RSA,
@@ -46,6 +51,7 @@ final class JWTKeyPairTest extends CIUnitTestCase
             // Drain pending OpenSSL errors so they do not leak into other tests.
             while (openssl_error_string() !== false) {
             }
+
             return false;
         }
 
@@ -68,7 +74,7 @@ final class JWTKeyPairTest extends CIUnitTestCase
     }
 
     /**
-     * @param mixed[] $options
+     * @param list<mixed> $options
      */
     private function setCliOptions(array $options): void
     {

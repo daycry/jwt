@@ -1,15 +1,26 @@
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/donate?business=SYC5XDT23UZ5G&no_recurring=0&item_name=Thank+you%21&currency_code=EUR)
-
 # JWT for CodeIgniter 4
 
 A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt ^5`](https://github.com/lcobucci/jwt). Supports HMAC, RSA and ECDSA.
 
-[![Build Status](https://github.com/daycry/jwt/workflows/PHP%20Tests/badge.svg)](https://github.com/daycry/jwt/actions?query=workflow%3A%22PHP+Tests%22)
+### Package
+[![Latest Stable Version](https://img.shields.io/packagist/v/daycry/jwt.svg?label=stable)](https://packagist.org/packages/daycry/jwt)
+[![Total Downloads](https://img.shields.io/packagist/dt/daycry/jwt.svg)](https://packagist.org/packages/daycry/jwt)
+[![Monthly Downloads](https://img.shields.io/packagist/dm/daycry/jwt.svg)](https://packagist.org/packages/daycry/jwt)
+[![PHP Version Require](https://img.shields.io/packagist/dependency-v/daycry/jwt/php?color=8892bf)](https://packagist.org/packages/daycry/jwt)
+[![License](https://img.shields.io/github/license/daycry/jwt)](https://github.com/daycry/jwt/blob/master/LICENSE)
+
+### Quality
+[![PHP Tests](https://github.com/daycry/jwt/actions/workflows/phpunit.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/phpunit.yml)
+[![PHPStan](https://github.com/daycry/jwt/actions/workflows/phpstan.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/phpstan.yml)
+[![Psalm](https://github.com/daycry/jwt/actions/workflows/psalm.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/psalm.yml)
+[![Rector](https://github.com/daycry/jwt/actions/workflows/rector.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/rector.yml)
+[![Code Style](https://github.com/daycry/jwt/actions/workflows/code-style.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/code-style.yml)
+[![CodeQL](https://github.com/daycry/jwt/actions/workflows/codeql.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/codeql.yml)
 [![Coverage Status](https://coveralls.io/repos/github/daycry/jwt/badge.svg?branch=master)](https://coveralls.io/github/daycry/jwt?branch=master)
-[![Downloads](https://poser.pugx.org/daycry/jwt/downloads)](https://packagist.org/packages/daycry/jwt)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/daycry/jwt)](https://packagist.org/packages/daycry/jwt)
-[![GitHub stars](https://img.shields.io/github/stars/daycry/jwt)](https://packagist.org/packages/daycry/jwt)
-[![GitHub license](https://img.shields.io/github/license/daycry/jwt)](https://github.com/daycry/jwt/blob/master/LICENSE)
+
+### Community
+[![GitHub stars](https://img.shields.io/github/stars/daycry/jwt?style=social)](https://github.com/daycry/jwt/stargazers)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.com/donate?business=SYC5XDT23UZ5G&no_recurring=0&item_name=Thank+you%21&currency_code=EUR)
 
 ---
 

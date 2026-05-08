@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Validators;
 
 use CodeIgniter\Test\CIUnitTestCase;
@@ -21,7 +23,7 @@ final class AsymmetricTest extends CIUnitTestCase
     {
         parent::setUp();
 
-        if (! self::opensslIsUsable()) {
+        if (! $this->opensslIsUsable()) {
             $this->markTestSkipped('OpenSSL pkey functions are not available (missing openssl.cnf?).');
         }
 
@@ -29,7 +31,7 @@ final class AsymmetricTest extends CIUnitTestCase
         mkdir($this->tmpDir, 0700, true);
     }
 
-    private static function opensslIsUsable(): bool
+    private function opensslIsUsable(): bool
     {
         $resource = @openssl_pkey_new([
             'private_key_type' => OPENSSL_KEYTYPE_RSA,
@@ -38,6 +40,7 @@ final class AsymmetricTest extends CIUnitTestCase
         if ($resource === false) {
             while (openssl_error_string() !== false) {
             }
+
             return false;
         }
 

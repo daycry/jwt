@@ -37,7 +37,8 @@
         "ergebnis/composer-normalize": "^2.28",
         "php-vcr/php-vcr": "^1",
         "phpstan/phpstan-strict-rules": "^2",
-        "phpunit/phpcov": "^10"
+        "phpunit/phpcov": "^10",
+        "vimeo/psalm": "^6"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
@@ -72,8 +73,18 @@
     },
     "scripts": {
         "analyze": "vendor/bin/phpstan analyze",
+        "psalm": "vendor/bin/psalm",
+        "rector": "vendor/bin/rector process --dry-run",
+        "rector:fix": "vendor/bin/rector process",
         "cs-check": "php-cs-fixer fix --ansi --verbose --diff --dry-run",
         "cs-fix": "php-cs-fixer fix --ansi --verbose --diff",
-        "test": "vendor/bin/phpunit"
+        "test": "vendor/bin/phpunit",
+        "qa": [
+            "@analyze",
+            "@psalm",
+            "@rector",
+            "@cs-check",
+            "@test"
+        ]
     }
 }

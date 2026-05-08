@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Commands;
 
 use CodeIgniter\Test\CIUnitTestCase;
@@ -53,10 +55,10 @@ final class JWTPublishTest extends CIUnitTestCase
         command('jwt:publish');
         $content = file_get_contents($this->publishedConfigPath);
 
-        $this->assertStringContainsString('namespace Config;', $content);
-        $this->assertStringContainsString('extends \Daycry\JWT\Config\JWT', $content);
-        $this->assertStringNotContainsString('namespace Daycry\JWT\Config;', $content);
-        $this->assertStringNotContainsString('extends BaseConfig', $content);
+        $this->assertStringContainsString('namespace Config;', (string) $content);
+        $this->assertStringContainsString('extends \Daycry\JWT\Config\JWT', (string) $content);
+        $this->assertStringNotContainsString('namespace Daycry\JWT\Config;', (string) $content);
+        $this->assertStringNotContainsString('extends BaseConfig', (string) $content);
     }
 
     public function testCommandMetadata(): void
@@ -66,6 +68,6 @@ final class JWTPublishTest extends CIUnitTestCase
 
         $this->assertSame('JWT', $properties['group']);
         $this->assertSame('jwt:publish', $properties['name']);
-        $this->assertStringContainsString('JWT config file publisher', $properties['description']);
+        $this->assertStringContainsString('JWT config file publisher', (string) $properties['description']);
     }
 }

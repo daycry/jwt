@@ -4,6 +4,7 @@ namespace Daycry\JWT\Commands;
 
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
+use OpenSSLAsymmetricKey;
 use RuntimeException;
 use Throwable;
 
@@ -14,7 +15,9 @@ class JWTKeyPair extends BaseCommand
     protected $description = 'Generate an RSA or ECDSA key pair for asymmetric JWT signing.';
     protected $usage       = 'jwt:keypair [options]';
 
-    /** @var array<string, string> */
+    /**
+     * @var array<string, string>
+     */
     protected $options = [
         '--algorithm'  => 'rsa | ecdsa (default: rsa)',
         '--bits'       => 'RSA key size in bits (default: 2048)',
@@ -51,7 +54,7 @@ class JWTKeyPair extends BaseCommand
 
             $passphraseString = is_string($passphrase) && $passphrase !== '' ? $passphrase : null;
             $exported         = openssl_pkey_export($resource, $privatePem, $passphraseString);
-            if ($exported !== true || ! is_string($privatePem)) {
+            if (! $exported || ! is_string($privatePem)) {
                 throw new RuntimeException('Failed to export private key: ' . openssl_error_string());
             }
 
@@ -72,7 +75,7 @@ class JWTKeyPair extends BaseCommand
             CLI::write('  public : ' . $publicPath, 'cyan');
             CLI::newLine();
             CLI::write('Add these entries to your .env file:', 'yellow');
-            CLI::write("jwt.algorithmType = \"asymmetric\"", 'cyan');
+            CLI::write('jwt.algorithmType = "asymmetric"', 'cyan');
             CLI::write("jwt.signingKey    = \"{$privatePath}\"", 'cyan');
             CLI::write("jwt.verifyingKey  = \"{$publicPath}\"", 'cyan');
             if ($passphraseString !== null) {
@@ -100,7 +103,7 @@ class JWTKeyPair extends BaseCommand
     }
 
     /**
-     * @return \OpenSSLAsymmetricKey
+     * @return OpenSSLAsymmetricKey
      */
     private function generateKeyResource(string $algorithm)
     {

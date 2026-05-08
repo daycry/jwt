@@ -21,6 +21,7 @@ use Lcobucci\JWT\Validation\Constraint\LooseValidAt;
 use Lcobucci\JWT\Validation\Constraint\PermittedFor;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
+use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 use Throwable;
 
 /**
@@ -34,7 +35,9 @@ final class JWT
 {
     private bool $split = false;
 
-    /** @var non-empty-string */
+    /**
+     * @var non-empty-string
+     */
     private string $paramData = 'data';
 
     private ?int $leewaySeconds;
@@ -108,6 +111,7 @@ final class JWT
             if ($this->split) {
                 /** @var iterable<string, mixed> $iterable */
                 $iterable = is_object($data) ? get_object_vars($data) : $data;
+
                 foreach ($iterable as $key => $value) {
                     $builder = $builder->withClaim((string) $key, $value);
                 }
@@ -158,8 +162,8 @@ final class JWT
     /**
      * Decode and validate. Always throws on parse errors and validation failures.
      *
-     * @throws InvalidTokenException When the token cannot be parsed.
-     * @throws \Lcobucci\JWT\Validation\RequiredConstraintsViolated When a constraint fails.
+     * @throws InvalidTokenException       When the token cannot be parsed.
+     * @throws RequiredConstraintsViolated When a constraint fails.
      */
     public function decode(string $token): Plain
     {
@@ -201,10 +205,8 @@ final class JWT
      *   - Scalar / split-mode tokens → raw claim value.
      *   - Compact-mode tokens (header `cty=json`) → `json_decode`d back into an array.
      *
-     * @return mixed
-     *
      * @throws InvalidTokenException
-     * @throws \Lcobucci\JWT\Validation\RequiredConstraintsViolated
+     * @throws RequiredConstraintsViolated
      */
     public function getPayload(string $token): mixed
     {
@@ -220,13 +222,13 @@ final class JWT
 
     public function isValid(string $token): bool
     {
-        return $this->tryDecode($token) !== null;
+        return $this->tryDecode($token) instanceof Plain;
     }
 
     public function isExpired(string $token): bool
     {
         $parsed = $this->parseWithoutValidation($token);
-        if ($parsed === null) {
+        if (! $parsed instanceof Plain) {
             return true;
         }
 
@@ -241,7 +243,7 @@ final class JWT
     public function getTimeToExpiry(string $token): ?int
     {
         $parsed = $this->parseWithoutValidation($token);
-        if ($parsed === null) {
+        if (! $parsed instanceof Plain) {
             return null;
         }
 
@@ -346,8 +348,8 @@ final class JWT
 
         foreach ($this->config->validateClaims as $name) {
             $constraints[] = match ($name) {
-                'SignedWith'                                  => $this->buildSignedWithConstraint(),
-                'IssuedBy'                                    => new IssuedBy(
+                'SignedWith' => $this->buildSignedWithConstraint(),
+                'IssuedBy'   => new IssuedBy(
                     $this->config->issuer ?? throw JWTConfigurationException::missingClaim('issuer'),
                 ),
                 'IdentifiedBy' => new IdentifiedBy(
@@ -356,15 +358,15 @@ final class JWT
                 'PermittedFor' => new PermittedFor(
                     $this->config->audience ?? throw JWTConfigurationException::missingClaim('audience'),
                 ),
-                'StrictValidAt'                               => new StrictValidAt(
+                'StrictValidAt' => new StrictValidAt(
                     SystemClock::fromUTC(),
                     $this->buildLeewayInterval(),
                 ),
-                'ValidAt', 'LooseValidAt'                     => new LooseValidAt(
+                'ValidAt', 'LooseValidAt' => new LooseValidAt(
                     SystemClock::fromUTC(),
                     $this->buildLeewayInterval(),
                 ),
-                default                                       => throw JWTConfigurationException::unknownConstraint($name),
+                default => throw JWTConfigurationException::unknownConstraint($name),
             };
         }
 

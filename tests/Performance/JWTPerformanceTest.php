@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Performance;
 
 use CodeIgniter\Test\CIUnitTestCase;
@@ -26,6 +28,7 @@ final class JWTPerformanceTest extends CIUnitTestCase
     public function testInstantiationIsCheap(): void
     {
         $start = microtime(true);
+
         for ($i = 0; $i < 100; $i++) {
             new JWT($this->config);
         }
@@ -60,6 +63,7 @@ final class JWTPerformanceTest extends CIUnitTestCase
         $token = $this->library->encode(['test' => 'data']);
 
         $start = microtime(true);
+
         for ($i = 0; $i < 100; $i++) {
             $this->library->isExpired($token);
         }

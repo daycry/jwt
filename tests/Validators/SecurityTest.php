@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Validators;
 
 use CodeIgniter\Test\CIUnitTestCase;
@@ -117,7 +119,7 @@ final class SecurityTest extends CIUnitTestCase
         $jwt   = new JWT($this->config);
         $token = $jwt->encode('payload');
 
-        $this->assertNull($jwt->tryDecode($this->mutateSignature($token)));
+        $this->assertNotInstanceOf(Plain::class, $jwt->tryDecode($this->mutateSignature($token)));
     }
 
     public function testExtractClaimsUnsafeReturnsNullForMalformedToken(): void

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Daycry\JWT\Config;
 
 use CodeIgniter\Config\BaseConfig;
@@ -66,10 +68,14 @@ class JWT extends BaseConfig
     public ?string $audience   = null;
     public ?string $identifier = null;
 
-    /** Modifier accepted by `DateTimeImmutable::modify()`. */
+    /**
+     * Modifier accepted by `DateTimeImmutable::modify()`.
+     */
     public string $canOnlyBeUsedAfter = '+0 minute';
 
-    /** Modifier accepted by `DateTimeImmutable::modify()`. */
+    /**
+     * Modifier accepted by `DateTimeImmutable::modify()`.
+     */
     public string $expiresAt = '+24 hour';
 
     /**
@@ -78,7 +84,9 @@ class JWT extends BaseConfig
      */
     public ?int $leeway = 0;
 
-    /** When false, `decode()` skips validation entirely. Use only in tests / debug. */
+    /**
+     * When false, `decode()` skips validation entirely. Use only in tests / debug.
+     */
     public bool $validate = true;
 
     /**
