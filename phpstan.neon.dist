@@ -1,0 +1,33 @@
+parameters:
+    tmpDir: build/phpstan
+    level: 8
+    paths:
+        - src/
+        - tests/
+    bootstrapFiles:
+        - vendor/codeigniter4/framework/system/Test/bootstrap.php
+    excludePaths:
+        - tests/_support/*
+        - examples/*
+    scanDirectories:
+        - vendor/codeigniter4/framework/system/Helpers
+    universalObjectCratesClasses:
+        - CodeIgniter\Entity
+        - CodeIgniter\Entity\Entity
+    dynamicConstantNames:
+        - APP_NAMESPACE
+        - CI_DEBUG
+        - ENVIRONMENT
+        - ROOTPATH
+        - APPPATH
+        - WRITEPATH
+    codeigniter:
+        additionalConfigNamespaces:
+            - Daycry\JWT\Config\
+    ignoreErrors:
+        # PHPUnit assertions are static methods used dynamically by convention.
+        - identifier: staticMethod.dynamicCall
+          path: tests/*
+
+includes:
+    - phpstan-baseline.neon

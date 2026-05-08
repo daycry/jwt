@@ -1,24 +1,35 @@
 {
     "name": "daycry/jwt",
     "description": "JWT Token for Codeigniter 4",
+    "license": "MIT",
+    "type": "library",
+    "keywords": [
+        "jwt",
+        "codeigniter4",
+        "auth",
+        "bearer",
+        "json-web-token",
+        "lcobucci"
+    ],
     "homepage": "https://github.com/daycry/jwt",
-    "authors":
-    [
+    "support": {
+        "issues": "https://github.com/daycry/jwt/issues",
+        "source": "https://github.com/daycry/jwt"
+    },
+    "authors": [
         {
             "name": "daycry",
             "homepage": "https://github.com/daycry",
             "role": "Developer"
         }
     ],
-    "license": "MIT",
-    "minimum-stability": "dev",
-    "prefer-stable": true,
     "require": {
-      "php": "^8.1",
-        "lcobucci/jwt": "^4"
+        "php": "^8.2",
+        "lcobucci/clock": "^3.0",
+        "lcobucci/jwt": "^5.5",
+        "psr/clock": "^1.0"
     },
-    "require-dev":
-    {
+    "require-dev": {
         "codeigniter4/framework": "^4",
         "codeigniter/phpstan-codeigniter": "^1.4",
         "codeigniter4/devkit": "^1",
@@ -28,8 +39,9 @@
         "phpstan/phpstan-strict-rules": "^2",
         "phpunit/phpcov": "^10"
     },
-    "autoload":
-    {
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
         "psr-4": {
             "Daycry\\JWT\\": "src/"
         },
@@ -37,22 +49,31 @@
             "**/Database/Migrations/**"
         ]
     },
-    "autoload-dev":
-    {
-        "psr-4":
-        {
+    "autoload-dev": {
+        "psr-4": {
             "Tests\\": "tests/",
             "Tests\\Support\\": "tests/_support"
         }
-    },
-    "scripts": {
-        "test": "vendor/bin/phpunit",
-        "cs-fix": "php-cs-fixer fix --ansi --verbose --diff"
     },
     "config": {
         "allow-plugins": {
             "phpstan/extension-installer": true,
             "ergebnis/composer-normalize": true
         }
+    },
+    "extra": {
+        "spark": {
+            "commands": [
+                "Daycry\\JWT\\Commands\\JWTGenerateKey",
+                "Daycry\\JWT\\Commands\\JWTKeyPair",
+                "Daycry\\JWT\\Commands\\JWTPublish"
+            ]
+        }
+    },
+    "scripts": {
+        "analyze": "vendor/bin/phpstan analyze",
+        "cs-check": "php-cs-fixer fix --ansi --verbose --diff --dry-run",
+        "cs-fix": "php-cs-fixer fix --ansi --verbose --diff",
+        "test": "vendor/bin/phpunit"
     }
 }

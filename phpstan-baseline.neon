@@ -1,0 +1,211 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Only booleans are allowed in an if condition, int\<0, max\>\|false given\.$#'
+			identifier: if.condNotBoolean
+			count: 1
+			path: src/Commands/JWTGenerateKey.php
+
+		-
+			message: '#^Only booleans are allowed in an if condition, int\|false given\.$#'
+			identifier: if.condNotBoolean
+			count: 1
+			path: src/Commands/JWTGenerateKey.php
+
+		-
+			message: '#^Only booleans are allowed in an if condition, string\|true\|null given\.$#'
+			identifier: if.condNotBoolean
+			count: 1
+			path: src/Commands/JWTGenerateKey.php
+
+		-
+			message: '#^Only booleans are allowed in \|\|, string\|true\|null given on the left side\.$#'
+			identifier: booleanOr.leftNotBoolean
+			count: 1
+			path: src/Commands/JWTGenerateKey.php
+
+		-
+			message: '#^Parameter \#2 \$subject of function preg_match expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Commands/JWTGenerateKey.php
+
+		-
+			message: '#^Parameter \#3 \$subject of function preg_replace expects array\<float\|int\|string\>\|string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Commands/JWTGenerateKey.php
+
+		-
+			message: '#^Call to static method file\(\) on an unknown class Lcobucci\\JWT\\Signer\\Key\\LocalFileReference\.$#'
+			identifier: class.notFound
+			count: 2
+			path: src/JWT.php
+
+		-
+			message: '#^Casting to string something that''s already string\.$#'
+			identifier: cast.useless
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$audience of class Lcobucci\\JWT\\Validation\\Constraint\\PermittedFor constructor expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$contents of static method Lcobucci\\JWT\\Signer\\Key\\InMemory\:\:plainText\(\) expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$id of class Lcobucci\\JWT\\Validation\\Constraint\\IdentifiedBy constructor expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$id of method Lcobucci\\JWT\\Builder\:\:identifiedBy\(\) expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$issuer of method Lcobucci\\JWT\\Builder\:\:issuedBy\(\) expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$jwt of method Lcobucci\\JWT\\Parser\:\:parse\(\) expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$name of method Lcobucci\\JWT\\Builder\:\:withClaim\(\) expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$signer of static method Lcobucci\\JWT\\Configuration\:\:forAsymmetricSigner\(\) expects Lcobucci\\JWT\\Signer, object given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$signer of static method Lcobucci\\JWT\\Configuration\:\:forSymmetricSigner\(\) expects Lcobucci\\JWT\\Signer, object given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$audiences of method Lcobucci\\JWT\\Builder\:\:permittedFor\(\) expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$issuers of class Lcobucci\\JWT\\Validation\\Constraint\\IssuedBy constructor expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between DateTimeImmutable and false will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 2
+			path: src/JWT.php
+
+		-
+			message: '#^Method Tests\\Commands\\JWTKeyPairTest\:\:runCommand\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Commands/JWTKeyPairTest.php
+
+		-
+			message: '#^Short ternary operator is not allowed\. Use null coalesce operator if applicable or consider using long ternary\.$#'
+			identifier: ternary.shortNotAllowed
+			count: 1
+			path: tests/Commands/JWTKeyPairTest.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringContainsString\(\) expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Commands/JWTPublishTest.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringNotContainsString\(\) expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Commands/JWTPublishTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Performance/JWTPerformanceTest.php
+
+		-
+			message: '#^Only booleans are allowed in a ternary operator condition, mixed given\.$#'
+			identifier: ternary.condNotBoolean
+			count: 1
+			path: tests/Performance/JWTPerformanceTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''Lcobucci\\\\JWT\\\\Token\\\\Plain'' and Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Validators/AsymmetricTest.php
+
+		-
+			message: '#^Cannot access offset ''key'' on array\|false\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: tests/Validators/AsymmetricTest.php
+
+		-
+			message: '#^Method Tests\\Validators\\AsymmetricTest\:\:generateEcdsaKeyPair\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Validators/AsymmetricTest.php
+
+		-
+			message: '#^Method Tests\\Validators\\AsymmetricTest\:\:generateRsaKeyPair\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Validators/AsymmetricTest.php
+
+		-
+			message: '#^Parameter \#1 \$key of function openssl_pkey_export expects array\|OpenSSLAsymmetricKey\|OpenSSLCertificate\|string, OpenSSLAsymmetricKey\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Validators/AsymmetricTest.php
+
+		-
+			message: '#^Parameter \#1 \$key of function openssl_pkey_get_details expects OpenSSLAsymmetricKey, OpenSSLAsymmetricKey\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Validators/AsymmetricTest.php
+
+		-
+			message: '#^Short ternary operator is not allowed\. Use null coalesce operator if applicable or consider using long ternary\.$#'
+			identifier: ternary.shortNotAllowed
+			count: 1
+			path: tests/Validators/AsymmetricTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''Lcobucci\\\\JWT\\\\Token\\\\Plain'' and Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Validators/JWTTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''Lcobucci\\\\JWT\\\\Token\\\\Plain'' and Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 3
+			path: tests/Validators/SecurityTest.php
