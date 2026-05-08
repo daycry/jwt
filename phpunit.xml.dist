@@ -50,17 +50,14 @@
         <!-- Root path for .env file access -->
         <const name="ROOTPATH" value="./"/>
         
-        <!-- JWT Testing Environment Variables -->
+        <!-- JWT Testing Environment Variables (CI4 BaseConfig convention: shortPrefix.property) -->
         <env name="CI_ENVIRONMENT" value="testing"/>
-        <env name="JWT_SIGNER" value="dGVzdC1qd3Qta2V5LWZvci10ZXN0aW5nLXB1cnBvc2VzLW9ubHk="/>
-        <env name="JWT_ISSUER" value="https://test.example.com"/>
-        <env name="JWT_AUDIENCE" value="https://test.example.com"/>
-        <env name="JWT_IDENTIFIER" value="jwt-test-app"/>
-        <env name="JWT_EXPIRES_AT" value="+1 hour"/>
-        <env name="JWT_ALGORITHM" value="Lcobucci\JWT\Signer\Hmac\Sha256"/>
-        <env name="JWT_THROWABLE" value="true"/>
-        <env name="JWT_VALIDATE" value="true"/>
-        
+        <env name="jwt.signer" value="dGVzdC1qd3Qta2V5LWZvci10ZXN0aW5nLXB1cnBvc2VzLW9ubHk="/>
+        <env name="jwt.issuer" value="https://test.example.com"/>
+        <env name="jwt.audience" value="https://test.example.com"/>
+        <env name="jwt.identifier" value="jwt-test-app"/>
+        <env name="jwt.expiresAt" value="+1 hour"/>
+
         <!-- Auto-answer CLI prompts in testing -->
         <env name="CLI_NO_PROMPT" value="true"/>
         <env name="AUTO_ANSWER" value="y"/>
