@@ -28,12 +28,14 @@ final class JWTPerformanceTest extends CIUnitTestCase
     public function testInstantiationIsCheap(): void
     {
         $start = microtime(true);
+        $last  = null;
 
         for ($i = 0; $i < 100; $i++) {
-            new JWT($this->config);
+            $last = new JWT($this->config);
         }
         $elapsed = microtime(true) - $start;
 
+        $this->assertInstanceOf(JWT::class, $last);
         $this->assertLessThan(0.5, $elapsed, 'Instantiating 100 JWT objects should be under 500 ms');
     }
 

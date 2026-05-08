@@ -28,6 +28,11 @@ parameters:
         # PHPUnit assertions are static methods used dynamically by convention.
         - identifier: staticMethod.dynamicCall
           path: tests/*
+        # PHP 8.5 changed DateTimeImmutable::modify() to throw instead of returning false;
+        # the defensive `=== false` checks are still meaningful on PHP 8.2-8.4 so we keep them.
+        - identifier: identical.alwaysFalse
+          path: src/JWT.php
+          reportUnmatched: false
 
 includes:
     - phpstan-baseline.neon
