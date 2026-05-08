@@ -59,7 +59,7 @@ final class AsymmetricTest extends CIUnitTestCase
         parent::tearDown();
     }
 
-    private function generateRsaKeyPair(): array
+    private function generateRsaKeyPair(string $name = 'rsa'): array
     {
         $resource = openssl_pkey_new([
             'private_key_type' => OPENSSL_KEYTYPE_RSA,
@@ -68,15 +68,16 @@ final class AsymmetricTest extends CIUnitTestCase
         openssl_pkey_export($resource, $privatePem);
         $publicPem = openssl_pkey_get_details($resource)['key'];
 
-        $privatePath = $this->tmpDir . DIRECTORY_SEPARATOR . 'rsa-private.pem';
-        $publicPath  = $this->tmpDir . DIRECTORY_SEPARATOR . 'rsa-public.pem';
+        $unique      = $name . '-' . uniqid('', true);
+        $privatePath = $this->tmpDir . DIRECTORY_SEPARATOR . $unique . '-private.pem';
+        $publicPath  = $this->tmpDir . DIRECTORY_SEPARATOR . $unique . '-public.pem';
         file_put_contents($privatePath, $privatePem);
         file_put_contents($publicPath, $publicPem);
 
         return [$privatePath, $publicPath];
     }
 
-    private function generateEcdsaKeyPair(): array
+    private function generateEcdsaKeyPair(string $name = 'ec'): array
     {
         $resource = openssl_pkey_new([
             'private_key_type' => OPENSSL_KEYTYPE_EC,
@@ -85,8 +86,9 @@ final class AsymmetricTest extends CIUnitTestCase
         openssl_pkey_export($resource, $privatePem);
         $publicPem = openssl_pkey_get_details($resource)['key'];
 
-        $privatePath = $this->tmpDir . DIRECTORY_SEPARATOR . 'ec-private.pem';
-        $publicPath  = $this->tmpDir . DIRECTORY_SEPARATOR . 'ec-public.pem';
+        $unique      = $name . '-' . uniqid('', true);
+        $privatePath = $this->tmpDir . DIRECTORY_SEPARATOR . $unique . '-private.pem';
+        $publicPath  = $this->tmpDir . DIRECTORY_SEPARATOR . $unique . '-public.pem';
         file_put_contents($privatePath, $privatePem);
         file_put_contents($publicPath, $publicPem);
 
