@@ -115,9 +115,33 @@ parameters:
 			path: src/JWT.php
 
 		-
+			message: '#^Method Daycry\\JWT\\Commands\\JWTGenerateKey@anonymous/tests/Commands/JWTGenerateKeyTest\.php\:94\:\:__construct\(\) has parameter \$commands with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: tests/Commands/JWTGenerateKeyTest.php
+
+		-
+			message: '#^Method Daycry\\JWT\\Commands\\JWTGenerateKey@anonymous/tests/Commands/JWTGenerateKeyTest\.php\:94\:\:__construct\(\) has parameter \$logger with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: tests/Commands/JWTGenerateKeyTest.php
+
+		-
 			message: '#^Parameter \#2 \$options of method Tests\\Commands\\JWTGenerateKeyTest\:\:runCommand\(\) expects list\<mixed\>, array\{show\: null\} given\.$#'
 			identifier: argument.type
 			count: 5
+			path: tests/Commands/JWTGenerateKeyTest.php
+
+		-
+			message: '#^Parameter \#2 \$options of method Tests\\Commands\\JWTGenerateKeyTest\:\:runCommandSandboxed\(\) expects list\<mixed\>, array\{force\: null\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Commands/JWTGenerateKeyTest.php
+
+		-
+			message: '#^Short ternary operator is not allowed\. Use null coalesce operator if applicable or consider using long ternary\.$#'
+			identifier: ternary.shortNotAllowed
+			count: 1
 			path: tests/Commands/JWTGenerateKeyTest.php
 
 		-
@@ -137,6 +161,12 @@ parameters:
 			identifier: ternary.shortNotAllowed
 			count: 1
 			path: tests/Commands/JWTKeyPairTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''RuntimeException'' and Daycry\\JWT\\Exceptions\\JWTConfigurationException will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Exceptions/JWTConfigurationExceptionTest.php
 
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'

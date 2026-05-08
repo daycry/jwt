@@ -43,10 +43,13 @@
   </file>
   <file src="tests/Commands/JWTGenerateKeyTest.php">
     <MissingOverrideAttribute>
+      <code><![CDATA[protected function envExamplePath(): string]]></code>
+      <code><![CDATA[protected function envPath(): string]]></code>
       <code><![CDATA[protected function setUp(): void]]></code>
       <code><![CDATA[protected function tearDown(): void]]></code>
     </MissingOverrideAttribute>
     <UndefinedClass>
+      <code><![CDATA[LoggerConfig]]></code>
       <code><![CDATA[LoggerConfig]]></code>
     </UndefinedClass>
   </file>
@@ -61,14 +64,24 @@
   </file>
   <file src="tests/Commands/JWTPublishTest.php">
     <MissingOverrideAttribute>
+      <code><![CDATA[protected function determineSourcePath(): void]]></code>
+      <code><![CDATA[protected function publishConfig(): bool]]></code>
       <code><![CDATA[protected function setUp(): void]]></code>
       <code><![CDATA[protected function tearDown(): void]]></code>
+      <code><![CDATA[protected function writeFile(string $path, string $content): bool]]></code>
     </MissingOverrideAttribute>
     <UndefinedClass>
       <code><![CDATA[Autoload]]></code>
+      <code><![CDATA[LoggerConfig]]></code>
+      <code><![CDATA[LoggerConfig]]></code>
+      <code><![CDATA[LoggerConfig]]></code>
+      <code><![CDATA[LoggerConfig]]></code>
     </UndefinedClass>
     <UndefinedConstant>
       <code><![CDATA[APP_NAMESPACE]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
     </UndefinedConstant>
     <UndefinedFunction>
       <code><![CDATA[command('jwt:publish')]]></code>

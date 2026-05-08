@@ -64,10 +64,26 @@ class JWTGenerateKey extends BaseCommand
         CLI::write('⚠️  Keep this key secure and never commit it to version control!', 'red');
     }
 
+    /**
+     * Resolve the .env file path. Override in tests to redirect to a sandbox.
+     */
+    protected function envPath(): string
+    {
+        return ROOTPATH . '.env';
+    }
+
+    /**
+     * Resolve the .env.example file path. Override in tests.
+     */
+    protected function envExamplePath(): string
+    {
+        return ROOTPATH . '.env.example';
+    }
+
     private function updateEnvFile(string $key): void
     {
-        $envPath        = ROOTPATH . '.env';
-        $envExamplePath = ROOTPATH . '.env.example';
+        $envPath        = $this->envPath();
+        $envExamplePath = $this->envExamplePath();
 
         // Check if .env exists
         if (! file_exists($envPath)) {

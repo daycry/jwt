@@ -255,6 +255,117 @@ final class SecurityTest extends CIUnitTestCase
         $this->assertSame('payload', $decoded->claims()->get('data'));
     }
 
+    public function testJwtForFactoryFallsBackToFrameworkConfig(): void
+    {
+        $jwt = JWT::for();
+
+        $token   = $jwt->encode('payload');
+        $decoded = $jwt->decode($token);
+
+        $this->assertSame('payload', $decoded->claims()->get('data'));
+    }
+
+    public function testWithLeewayProducesNewInstance(): void
+    {
+        $jwt    = new JWT($this->config);
+        $leeway = $jwt->withLeeway(60);
+
+        $this->assertNotSame($jwt, $leeway);
+
+        $token = $leeway->encode('payload');
+        $this->assertSame('payload', $leeway->decode($token)->claims()->get('data'));
+    }
+
+    public function testTryDecodeReturnsPlainOnSuccess(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        $decoded = $jwt->tryDecode($token);
+
+        $this->assertInstanceOf(Plain::class, $decoded);
+        $this->assertSame('payload', $decoded->claims()->get('data'));
+    }
+
+    public function testGetPayloadWithSplitModeReturnsClaimValue(): void
+    {
+        $jwt = (new JWT($this->config))->withSplitData();
+
+        $token = $jwt->encode(['hello' => 'world']);
+
+        // Split mode does not set cty=json, so getPayload returns the raw claim
+        // value at $paramData (defaults to 'data') — null in this case.
+        $this->assertNull($jwt->getPayload($token));
+    }
+
+    public function testIsExpiredFalseForFreshToken(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        $this->assertFalse($jwt->isExpired($token));
+    }
+
+    public function testGetTimeToExpiryForFreshTokenReturnsPositiveInteger(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        $ttl = $jwt->getTimeToExpiry($token);
+
+        $this->assertNotNull($ttl);
+        $this->assertGreaterThan(0, $ttl);
+    }
+
+    public function testExtractClaimsUnsafeReturnsAllClaimsWhenAllowed(): void
+    {
+        $this->config->allowUnsafeExtraction = true;
+        $jwt                                 = new JWT($this->config);
+
+        $token  = $jwt->encode(['x' => 1], 'user-99');
+        $claims = $jwt->extractClaimsUnsafe($token);
+
+        $this->assertNotNull($claims);
+        $this->assertSame('user-99', $claims['uid']);
+        $this->assertArrayHasKey('iss', $claims);
+        $this->assertArrayHasKey('aud', $claims);
+        $this->assertArrayHasKey('exp', $claims);
+    }
+
+    public function testExtractClaimsUnsafeWithoutAllowFlagStillWorksButLogs(): void
+    {
+        // The default allowUnsafeExtraction=false attempts a log_message warning.
+        $jwt = new JWT($this->config);
+
+        $token  = $jwt->encode('payload');
+        $claims = $jwt->extractClaimsUnsafe($token);
+
+        $this->assertNotNull($claims);
+    }
+
+    public function testAsymmetricConfigRejectsMissingSigningKey(): void
+    {
+        $this->config->algorithmType = 'asymmetric';
+        $this->config->signingKey    = null;
+        $jwt                         = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('"signingKey"');
+        $jwt->encode('payload');
+    }
+
+    public function testAsymmetricConfigRejectsMissingVerifyingKey(): void
+    {
+        $this->config->algorithmType = 'asymmetric';
+        $this->config->signingKey    = 'dummy';
+        $this->config->verifyingKey  = null;
+        $jwt                         = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('"verifyingKey"');
+        $jwt->encode('payload');
+    }
+
     private function mutateSignature(string $token): string
     {
         $segments    = explode('.', $token);
