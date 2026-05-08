@@ -37,12 +37,6 @@ parameters:
 			path: src/Commands/JWTGenerateKey.php
 
 		-
-			message: '#^Call to static method file\(\) on an unknown class Lcobucci\\JWT\\Signer\\Key\\LocalFileReference\.$#'
-			identifier: class.notFound
-			count: 2
-			path: src/JWT.php
-
-		-
 			message: '#^Casting to string something that''s already string\.$#'
 			identifier: cast.useless
 			count: 1
@@ -86,6 +80,12 @@ parameters:
 
 		-
 			message: '#^Parameter \#1 \$name of method Lcobucci\\JWT\\Builder\:\:withClaim\(\) expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/JWT.php
+
+		-
+			message: '#^Parameter \#1 \$path of static method Lcobucci\\JWT\\Signer\\Key\\InMemory\:\:file\(\) expects non\-empty\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/JWT.php

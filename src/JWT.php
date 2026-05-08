@@ -12,7 +12,6 @@ use Lcobucci\Clock\SystemClock;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Key;
 use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Signer\Key\LocalFileReference;
 use Lcobucci\JWT\Token\Plain;
 use Lcobucci\JWT\Validation\Constraint;
 use Lcobucci\JWT\Validation\Constraint\IdentifiedBy;
@@ -329,11 +328,11 @@ final class JWT
     private function loadKey(string $reference, string $passphrase): Key
     {
         if (str_starts_with($reference, 'file://')) {
-            return LocalFileReference::file(substr($reference, 7), $passphrase);
+            return InMemory::file(substr($reference, 7), $passphrase);
         }
 
         if (! str_contains($reference, "\n") && file_exists($reference) && is_readable($reference)) {
-            return LocalFileReference::file($reference, $passphrase);
+            return InMemory::file($reference, $passphrase);
         }
 
         return InMemory::plainText($reference, $passphrase);
