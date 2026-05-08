@@ -30,7 +30,7 @@ A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt
 - CodeIgniter **4.x**
 - `lcobucci/jwt ^5.5`
 
-> Upgrading from v1.x? Read the [v1 → v2 migration guide](docs/migration-v1-to-v2.md).
+> Upgrading from v2.x? Read the [v2 → v3 migration guide](docs/migration-v2-to-v3.md).
 
 ---
 

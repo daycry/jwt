@@ -193,7 +193,7 @@ Controlled by `Config\JWT::$validateClaims`. Allowed values:
 | `PermittedFor` | `Lcobucci\JWT\Validation\Constraint\PermittedFor` | `aud` |
 | `LooseValidAt` (default) | `Lcobucci\JWT\Validation\Constraint\LooseValidAt` | `iat`/`nbf`/`exp` with leeway |
 | `StrictValidAt` | `Lcobucci\JWT\Validation\Constraint\StrictValidAt` | `iat`/`nbf`/`exp` requiring all three |
-| `ValidAt` (alias) | → `LooseValidAt` | Provided for v1.x config compatibility |
+| `ValidAt` (alias) | → `LooseValidAt` | Provided for v2.x config compatibility |
 
 ```php
 $config->validateClaims = ['SignedWith', 'IssuedBy', 'StrictValidAt'];

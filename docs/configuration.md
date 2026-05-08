@@ -147,7 +147,7 @@ Allowed values:
 | `PermittedFor` | `PermittedFor` | `aud` |
 | `LooseValidAt` (default) | `LooseValidAt` | `iat`/`nbf`/`exp` with leeway, missing claims tolerated |
 | `StrictValidAt` | `StrictValidAt` | `iat`/`nbf`/`exp` all required |
-| `ValidAt` | alias of `LooseValidAt` | Provided for v1.x compatibility |
+| `ValidAt` | alias of `LooseValidAt` | Provided for v2.x compatibility |
 
 ### `$leeway`
 

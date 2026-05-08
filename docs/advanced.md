@@ -230,4 +230,4 @@ $jwt = JWT::for()->withLeeway(60);
 | `isExpired()` / `getTimeToExpiry()` | Parse only — no validation |
 | `extractClaimsUnsafe()` | Parse only + warning log |
 
-The library deliberately does not cache validation constraints across calls. The benefit (a few microseconds per request) was not worth the v1.x bug it caused (a frozen clock validating expired tokens as fresh). Build the `JWT` instance on demand; instantiation is cheap.
+The library deliberately does not cache validation constraints across calls. The benefit (a few microseconds per request) was not worth the v2.x bug it caused (a frozen clock validating expired tokens as fresh). Build the `JWT` instance on demand; instantiation is cheap.

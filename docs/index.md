@@ -14,7 +14,7 @@ JWT (JSON Web Token) library for **CodeIgniter 4**, built on top of [`lcobucci/j
 | [CLI Commands](commands.md) | `jwt:key`, `jwt:keypair`, `jwt:publish` |
 | [Advanced](advanced.md) | `tryDecode`, `getPayload`, `extractClaimsUnsafe`, leeway, error handling |
 | [Testing](testing.md) | Running the test suite |
-| [Migration v1 → v2](migration-v1-to-v2.md) | Upgrade guide from `lcobucci/jwt 4`-based v1.x to the v2.x rewrite |
+| [Migration v2 → v3](migration-v2-to-v3.md) | Upgrade guide from `lcobucci/jwt 4`-based v2.x to the v3.x rewrite |
 
 ---
 
