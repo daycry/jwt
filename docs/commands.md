@@ -2,7 +2,7 @@
 
 > **[← Back to index](index.md)**
 
-The library registers two Spark commands under the `JWT` group.
+The library registers three Spark commands under the `JWT` group.
 
 ---
 
@@ -100,7 +100,7 @@ php spark jwt:key
 
 ```
 ✅ JWT key successfully added to .env file
-Generated key: mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw=
+Generated key: <random-base64-string>
 ⚠️  Keep your .env file secure and never commit it to version control!
 ```
 
@@ -112,10 +112,10 @@ php spark jwt:key --show
 
 ```
 Generated JWT Key (32 bytes):
-mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw=
+<random-base64-string>
 
 Add this to your .env file:
-jwt.signer=mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw=
+jwt.signer=<random-base64-string>
 
 ⚠️  Keep this key secure and never commit it to version control!
 ```
@@ -141,3 +141,45 @@ php spark jwt:key --force
 | `jwt.signer` already present, no `--force` | Interactive prompt: overwrite? |
 | `jwt.signer` already present + `--force` | Silent overwrite |
 | `CI_ENVIRONMENT=testing` or `APP_ENV=testing` | Silent overwrite (test-safe behaviour) |
+
+---
+
+## jwt:keypair
+
+```
+php spark jwt:keypair [--algorithm=rsa|ecdsa] [--bits=2048] [--curve=prime256v1]
+                      [--output=writable/keys] [--name=jwt] [--passphrase=…] [--force]
+```
+
+Generates an RSA or ECDSA key pair on disk and prints the `.env` snippet to copy.
+
+### Options
+
+| Option | Default | Description |
+|---|---|---|
+| `--algorithm` | `rsa` | `rsa` or `ecdsa`. |
+| `--bits` | `2048` | RSA key size. Minimum 2048. Ignored for ECDSA. |
+| `--curve` | `prime256v1` | ECDSA curve. Common: `prime256v1`, `secp384r1`, `secp521r1`. Ignored for RSA. |
+| `--output` | `writable/keys` | Directory for the generated `.pem` files. Created if missing (mode `0700`). |
+| `--name` | `jwt` | Base file name. Result: `<name>-private.pem` + `<name>-public.pem`. |
+| `--passphrase` | *(none)* | Encrypt the private key with this passphrase. Don't forget to also set `Config\JWT::$passphrase`. |
+| `--force` | *(absent)* | Overwrite existing files at the target path. Without it the command refuses to clobber. |
+
+### Examples
+
+```bash
+# Default RSA-2048 keypair into writable/keys
+php spark jwt:keypair
+
+# ECDSA-P256 (ES256)
+php spark jwt:keypair --algorithm=ecdsa --curve=prime256v1
+
+# RSA-4096 with passphrase, custom location
+php spark jwt:keypair --algorithm=rsa --bits=4096 \
+                     --output=/srv/secrets/jwt --name=app1 \
+                     --passphrase='something-strong'
+```
+
+The command prints the exact `.env` keys you need to set afterwards. The private file is `chmod 0600`, the public file `chmod 0644`.
+
+> ⚠️ Never commit the private key. Store it outside the repository (e.g. CI secret store, vault) when possible.

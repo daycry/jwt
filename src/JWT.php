@@ -2,319 +2,401 @@
 
 namespace Daycry\JWT;
 
+use DateInterval;
 use DateTimeImmutable;
 use Daycry\JWT\Config\JWT as JWTConfig;
-use Lcobucci\Clock\FrozenClock;
+use Daycry\JWT\Exceptions\InvalidTokenException;
+use Daycry\JWT\Exceptions\JWTConfigurationException;
+use InvalidArgumentException;
+use Lcobucci\Clock\SystemClock;
 use Lcobucci\JWT\Configuration;
+use Lcobucci\JWT\Signer\Key;
 use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Token\DataSet;
+use Lcobucci\JWT\Signer\Key\LocalFileReference;
 use Lcobucci\JWT\Token\Plain;
+use Lcobucci\JWT\Validation\Constraint;
 use Lcobucci\JWT\Validation\Constraint\IdentifiedBy;
 use Lcobucci\JWT\Validation\Constraint\IssuedBy;
+use Lcobucci\JWT\Validation\Constraint\LooseValidAt;
 use Lcobucci\JWT\Validation\Constraint\PermittedFor;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
-use Lcobucci\JWT\Validation\Constraint\ValidAt;
-use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
+use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
+use Throwable;
 
-class JWT
+/**
+ * Immutable JWT facade over `lcobucci/jwt ^5`.
+ *
+ * Construct via the constructor (with an explicit config) or `JWT::for()` and
+ * configure per-call needs through the `with*()` methods, which return a new
+ * instance — the original is unchanged.
+ */
+final class JWT
 {
-    private ?JWTConfig $JWTConfig = null;
-
-    /**
-     * Configuration Class
-     */
-    private ?Configuration $configuration = null;
-
-    /**
-     * Split data if array
-     */
     private bool $split = false;
 
-    /**
-     * Name of attribute of data
-     */
+    /** @var non-empty-string */
     private string $paramData = 'data';
 
-    /**
-     * Cache for validation constraints
-     */
-    private array $constraintsCache = [];
+    private ?int $leewaySeconds;
 
-    public function __construct(?JWTConfig $config = null)
+    public function __construct(private JWTConfig $config)
     {
-        $this->JWTConfig = $config;
+        $this->leewaySeconds = $config->leeway;
     }
 
     /**
-     * Get JWT configuration with lazy loading
+     * Static factory. Falls back to the bound `Config\JWT` when no instance is provided.
      */
-    private function getConfig(): JWTConfig
+    public static function for(?JWTConfig $config = null): self
     {
-        if ($this->JWTConfig === null) {
-            $this->JWTConfig = config('JWT');
+        return new self($config ?? config('JWT'));
+    }
+
+    public function withSplitData(bool $split = true): self
+    {
+        $clone        = clone $this;
+        $clone->split = $split;
+
+        return $clone;
+    }
+
+    public function withParamData(string $name): self
+    {
+        if ($name === '') {
+            throw new InvalidArgumentException('paramData claim name cannot be empty.');
         }
+        $clone            = clone $this;
+        $clone->paramData = $name;
 
-        return $this->JWTConfig;
+        return $clone;
     }
 
-    /**
-     * Get JWT configuration with lazy loading
-     */
-    private function getConfiguration(): Configuration
+    public function withLeeway(int $seconds): self
     {
-        if ($this->configuration === null) {
-            $config = $this->getConfig();
-            $this->configuration = Configuration::forSymmetricSigner(
-                new $config->algorithm(),
-                InMemory::base64Encoded($config->signer),
-            );
+        if ($seconds < 0) {
+            throw new InvalidArgumentException('Leeway cannot be negative.');
         }
+        $clone                = clone $this;
+        $clone->leewaySeconds = $seconds;
 
-        return $this->configuration;
+        return $clone;
     }
 
-    public function getParamData()
+    public function getParamData(): string
     {
         return $this->paramData;
     }
 
-    /**
-     * Set the attibute to data claim
-     * Used if data is not an array
-     */
-    public function setParamData(string $data): JWT
+    public function isSplitData(): bool
     {
-        $this->paramData = $data;
-
-        return $this;
+        return $this->split;
     }
 
-    public function setSplitData(bool $value = true): JWT
+    public function encode(mixed $data, mixed $uid = null): string
     {
-        $this->split = $value;
+        $now           = new DateTimeImmutable();
+        $configuration = $this->buildConfiguration();
 
-        return $this;
-    }
+        $issuer     = $this->config->issuer ?? throw JWTConfigurationException::missingClaim('issuer');
+        $audience   = $this->config->audience ?? throw JWTConfigurationException::missingClaim('audience');
+        $identifier = $this->config->identifier ?? throw JWTConfigurationException::missingClaim('identifier');
 
-    public function encode($data, $uid = null): string
-    {
-        $now = new DateTimeImmutable();
-        $config = $this->getConfig();
-        $configuration = $this->getConfiguration();
-
-        $token = $configuration->builder();
+        $builder          = $configuration->builder();
+        $serializedAsJson = false;
 
         if (is_array($data) || is_object($data)) {
             if ($this->split) {
-                foreach ($data as $key => $value) {
-                    $token->withClaim($key, $value);
+                /** @var iterable<string, mixed> $iterable */
+                $iterable = is_object($data) ? get_object_vars($data) : $data;
+                foreach ($iterable as $key => $value) {
+                    $builder = $builder->withClaim((string) $key, $value);
                 }
             } else {
-                $token->withClaim($this->paramData, \json_encode($data, JSON_THROW_ON_ERROR));
+                $builder = $builder->withClaim(
+                    $this->paramData,
+                    json_encode($data, JSON_THROW_ON_ERROR),
+                );
+                $serializedAsJson = true;
             }
         } else {
-            $token->withClaim($this->paramData, $data);
+            $builder = $builder->withClaim($this->paramData, $data);
         }
 
-        $uid = $uid ?? $config->uid;
-
-        // Configures a new claim, called "uid"
-        if ($uid) {
-            $token->withClaim('uid', $uid);
+        $resolvedUid = $uid ?? $this->config->uid;
+        if ($resolvedUid !== null && $resolvedUid !== '') {
+            $builder = $builder->withClaim('uid', $resolvedUid);
         }
 
-        // Add a small delay to ensure token times are not in the future
-        $notBefore = $now->modify($config->canOnlyBeUsedAfter);
-        if ($notBefore > $now) {
+        if ($serializedAsJson) {
+            $builder = $builder->withHeader('cty', 'json');
+        }
+
+        $notBefore = $now->modify($this->config->canOnlyBeUsedAfter);
+        if ($notBefore === false || $notBefore > $now) {
             $notBefore = $now;
         }
 
-        // Configures the issuer (iss claim)
-        $token->issuedBy($config->issuer)
-            // Configures the audience (aud claim)
-            ->permittedFor($config->audience)
-            // Configures the id (jti claim)
-            ->identifiedBy($config->identifier)
-            // Configures the time that the token was issue (iat claim)
-            ->issuedAt($now)
-            // Configures the time that the token can be used (nbf claim)
-            ->canOnlyBeUsedAfter($notBefore)
-            // Configures the expiration time of the token (exp claim)
-            ->expiresAt($now->modify($config->expiresAt))
-            ->withHeader('type', 'Bearer');
+        $expiresAt = $now->modify($this->config->expiresAt);
+        if ($expiresAt === false) {
+            throw new InvalidArgumentException(
+                "Config::\$expiresAt is not a valid DateTimeImmutable modifier: {$this->config->expiresAt}",
+            );
+        }
 
-        // Builds a new token;
-        $token = $token->getToken($configuration->signer(), $configuration->signingKey());
+        $token = $builder
+            ->issuedBy($issuer)
+            ->permittedFor($audience)
+            ->identifiedBy($identifier)
+            ->issuedAt($now)
+            ->canOnlyBeUsedAfter($notBefore)
+            ->expiresAt($expiresAt)
+            ->getToken($configuration->signer(), $configuration->signingKey());
 
         return $token->toString();
     }
 
-    public function decode($data): DataSet|RequiredConstraintsViolated
+    /**
+     * Decode and validate. Always throws on parse errors and validation failures.
+     *
+     * @throws InvalidTokenException When the token cannot be parsed.
+     * @throws \Lcobucci\JWT\Validation\RequiredConstraintsViolated When a constraint fails.
+     */
+    public function decode(string $token): Plain
     {
-        $configuration = $this->getConfiguration();
-        $config = $this->getConfig();
-
-        /** @var Plain $token */
-        $token = $configuration->parser()->parse($data);
+        $configuration = $this->buildConfiguration();
 
         try {
-            // Validates the token signature
-            if ($config->validate === true) {
-                $constraints = $this->getValidationConstraints();
-                $configuration->validator()->assert($token, ...$constraints);
-            }
-        } catch (RequiredConstraintsViolated $e) {
-            if ($config->throwable) {
-                throw $e;
-            }
-
-            return $e;
+            $parsed = $configuration->parser()->parse($token);
+        } catch (Throwable $e) {
+            throw new InvalidTokenException('Token is malformed: ' . $e->getMessage(), 0, $e);
         }
 
-        return $token->claims();
+        if (! $parsed instanceof Plain) {
+            throw new InvalidTokenException('Only Plain tokens are supported.');
+        }
+
+        if ($this->config->validate) {
+            $configuration->validator()->assert($parsed, ...$this->buildValidationConstraints());
+        }
+
+        return $parsed;
     }
 
     /**
-     * Get validation constraints with caching
+     * Decode + validate without throwing. Returns null on any failure.
      */
-    private function getValidationConstraints(): array
+    public function tryDecode(string $token): ?Plain
     {
-        $config = $this->getConfig();
-        $constraintsKey = md5(serialize($config->validateClaims));
-
-        if (!isset($this->constraintsCache[$constraintsKey])) {
-            $this->constraintsCache[$constraintsKey] = $this->buildValidationConstraints($config);
+        try {
+            return $this->decode($token);
+        } catch (Throwable) {
+            return null;
         }
-
-        return $this->constraintsCache[$constraintsKey];
     }
 
     /**
-     * Build validation constraints dynamically based on configuration
+     * Validate the token and return the original payload value.
+     *
+     * Symmetric to `encode()`:
+     *   - Scalar / split-mode tokens → raw claim value.
+     *   - Compact-mode tokens (header `cty=json`) → `json_decode`d back into an array.
+     *
+     * @return mixed
+     *
+     * @throws InvalidTokenException
+     * @throws \Lcobucci\JWT\Validation\RequiredConstraintsViolated
      */
-    private function buildValidationConstraints(?JWTConfig $config = null): array
+    public function getPayload(string $token): mixed
+    {
+        $parsed = $this->decode($token);
+        $value  = $parsed->claims()->get($this->paramData);
+
+        if ($parsed->headers()->get('cty') === 'json' && is_string($value)) {
+            return json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+        }
+
+        return $value;
+    }
+
+    public function isValid(string $token): bool
+    {
+        return $this->tryDecode($token) !== null;
+    }
+
+    public function isExpired(string $token): bool
+    {
+        $parsed = $this->parseWithoutValidation($token);
+        if ($parsed === null) {
+            return true;
+        }
+
+        $exp = $parsed->claims()->get('exp');
+        if (! $exp instanceof DateTimeImmutable) {
+            return false;
+        }
+
+        return $exp->getTimestamp() < time();
+    }
+
+    public function getTimeToExpiry(string $token): ?int
+    {
+        $parsed = $this->parseWithoutValidation($token);
+        if ($parsed === null) {
+            return null;
+        }
+
+        $exp = $parsed->claims()->get('exp');
+        if (! $exp instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        return max(0, $exp->getTimestamp() - time());
+    }
+
+    /**
+     * Inspect claims without validation.
+     *
+     * Logs a warning unless `Config\JWT::$allowUnsafeExtraction === true` so accidental
+     * production usage shows up in logs.
+     *
+     * @return array<string, mixed>|null Null when the token cannot be parsed.
+     */
+    public function extractClaimsUnsafe(string $token): ?array
+    {
+        if (! $this->config->allowUnsafeExtraction) {
+            $this->logUnsafeExtractionWarning();
+        }
+
+        $parsed = $this->parseWithoutValidation($token);
+
+        return $parsed?->claims()->all();
+    }
+
+    private function parseWithoutValidation(string $token): ?Plain
+    {
+        try {
+            $parsed = $this->buildConfiguration()->parser()->parse($token);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $parsed instanceof Plain ? $parsed : null;
+    }
+
+    private function buildConfiguration(): Configuration
+    {
+        return match ($this->config->algorithmType) {
+            'symmetric'  => $this->buildSymmetricConfiguration(),
+            'asymmetric' => $this->buildAsymmetricConfiguration(),
+            default      => throw JWTConfigurationException::invalidAlgorithmType($this->config->algorithmType),
+        };
+    }
+
+    private function buildSymmetricConfiguration(): Configuration
+    {
+        if ($this->config->signer === null || $this->config->signer === '') {
+            throw JWTConfigurationException::missingSigner();
+        }
+
+        $signerClass = $this->config->algorithm;
+
+        return Configuration::forSymmetricSigner(
+            new $signerClass(),
+            InMemory::base64Encoded($this->config->signer),
+        );
+    }
+
+    private function buildAsymmetricConfiguration(): Configuration
+    {
+        if ($this->config->signingKey === null || $this->config->signingKey === '') {
+            throw JWTConfigurationException::missingClaim('signingKey');
+        }
+        if ($this->config->verifyingKey === null || $this->config->verifyingKey === '') {
+            throw JWTConfigurationException::missingClaim('verifyingKey');
+        }
+
+        $signerClass = $this->config->algorithm;
+
+        return Configuration::forAsymmetricSigner(
+            new $signerClass(),
+            $this->loadKey($this->config->signingKey, $this->config->passphrase ?? ''),
+            $this->loadKey($this->config->verifyingKey, ''),
+        );
+    }
+
+    private function loadKey(string $reference, string $passphrase): Key
+    {
+        if (str_starts_with($reference, 'file://')) {
+            return LocalFileReference::file(substr($reference, 7), $passphrase);
+        }
+
+        if (! str_contains($reference, "\n") && file_exists($reference) && is_readable($reference)) {
+            return LocalFileReference::file($reference, $passphrase);
+        }
+
+        return InMemory::plainText($reference, $passphrase);
+    }
+
+    /**
+     * @return list<Constraint>
+     */
+    private function buildValidationConstraints(): array
     {
         $constraints = [];
-        $clock       = new FrozenClock(new DateTimeImmutable());
-        $config      = $config ?? $this->getConfig();
-        $configuration = $this->getConfiguration();
 
-        foreach ($config->validateClaims as $constraintName) {
-            switch ($constraintName) {
-                case 'SignedWith':
-                    $constraints[] = new SignedWith(
-                        $configuration->signer(),
-                        $configuration->signingKey(),
-                    );
-                    break;
-
-                case 'IssuedBy':
-                    $constraints[] = new IssuedBy($config->issuer);
-                    break;
-
-                case 'ValidAt':
-                    // Use current time for validation to avoid "issued in future" errors
-                    $constraints[] = new ValidAt(new FrozenClock(new DateTimeImmutable()));
-                    break;
-
-                case 'IdentifiedBy':
-                    $constraints[] = new IdentifiedBy($config->identifier);
-                    break;
-
-                case 'PermittedFor':
-                    $constraints[] = new PermittedFor($config->audience);
-                    break;
-            }
+        foreach ($this->config->validateClaims as $name) {
+            $constraints[] = match ($name) {
+                'SignedWith'                                  => $this->buildSignedWithConstraint(),
+                'IssuedBy'                                    => new IssuedBy(
+                    $this->config->issuer ?? throw JWTConfigurationException::missingClaim('issuer'),
+                ),
+                'IdentifiedBy' => new IdentifiedBy(
+                    $this->config->identifier ?? throw JWTConfigurationException::missingClaim('identifier'),
+                ),
+                'PermittedFor' => new PermittedFor(
+                    $this->config->audience ?? throw JWTConfigurationException::missingClaim('audience'),
+                ),
+                'StrictValidAt'                               => new StrictValidAt(
+                    SystemClock::fromUTC(),
+                    $this->buildLeewayInterval(),
+                ),
+                'ValidAt', 'LooseValidAt'                     => new LooseValidAt(
+                    SystemClock::fromUTC(),
+                    $this->buildLeewayInterval(),
+                ),
+                default                                       => throw JWTConfigurationException::unknownConstraint($name),
+            };
         }
 
         return $constraints;
     }
 
-    /**
-     * Quick validation without full decoding (performance optimized)
-     */
-    public function isValid(string $token): bool
+    private function buildSignedWithConstraint(): SignedWith
     {
-        try {
-            $configuration = $this->getConfiguration();
-            /** @var Plain $parsedToken */
-            $parsedToken = $configuration->parser()->parse($token);
-            
-            $config = $this->getConfig();
-            if ($config->validate) {
-                $constraints = $this->getValidationConstraints();
-                $configuration->validator()->assert($parsedToken, ...$constraints);
-            }
-            
-            return true;
-        } catch (\Exception $e) {
-            return false;
-        }
+        $configuration = $this->buildConfiguration();
+
+        return new SignedWith($configuration->signer(), $configuration->verificationKey());
     }
 
-    /**
-     * Extract claims without validation for performance-critical scenarios
-     */
-    public function extractClaimsUnsafe(string $token): ?array
+    private function buildLeewayInterval(): ?DateInterval
     {
-        try {
-            $configuration = $this->getConfiguration();
-            /** @var Plain $parsedToken */
-            $parsedToken = $configuration->parser()->parse($token);
-            return $parsedToken->claims()->all();
-        } catch (\Exception $e) {
+        if ($this->leewaySeconds === null || $this->leewaySeconds <= 0) {
             return null;
         }
+
+        return new DateInterval('PT' . $this->leewaySeconds . 'S');
     }
 
-    /**
-     * Check if token is expired without full validation
-     */
-    public function isExpired(string $token): bool
+    private function logUnsafeExtractionWarning(): void
     {
-        try {
-            $configuration = $this->getConfiguration();
-            /** @var Plain $parsedToken */
-            $parsedToken = $configuration->parser()->parse($token);
-            $exp = $parsedToken->claims()->get('exp');
-            
-            if ($exp === null) {
-                return false;
-            }
-            
-            return $exp->getTimestamp() < time();
-        } catch (\Exception $e) {
-            return true;
+        if (! function_exists('log_message')) {
+            return;
         }
-    }
 
-    /**
-     * Get time to expiry in seconds
-     */
-    public function getTimeToExpiry(string $token): ?int
-    {
-        try {
-            $configuration = $this->getConfiguration();
-            /** @var Plain $parsedToken */
-            $parsedToken = $configuration->parser()->parse($token);
-            $exp = $parsedToken->claims()->get('exp');
-            
-            if ($exp === null) {
-                return null;
-            }
-            
-            $remaining = $exp->getTimestamp() - time();
-            return max(0, $remaining);
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
-    /**
-     * Clear constraints cache (useful for testing or configuration changes)
-     */
-    public function clearCache(): void
-    {
-        $this->constraintsCache = [];
+        log_message(
+            'warning',
+            'Daycry\\JWT\\JWT::extractClaimsUnsafe() was called without setting '
+            . 'Config\\JWT::$allowUnsafeExtraction = true. The token has not been validated.',
+        );
     }
 }

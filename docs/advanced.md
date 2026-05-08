@@ -6,162 +6,125 @@
 
 ## Utility Methods
 
-Beyond the core `encode()` / `decode()` pair, the `JWT` class exposes several convenience methods for scenarios where you need lightweight checks without full token decoding.
+### `tryDecode()`
 
----
+```php
+public function tryDecode(string $token): ?\Lcobucci\JWT\Token\Plain
+```
 
-### isValid()
+Like `decode()` but returns `null` instead of throwing. Convenient inside middleware.
+
+```php
+$decoded = $jwt->tryDecode($input);
+if ($decoded === null) {
+    return service('response')->setStatusCode(401);
+}
+```
+
+### `getPayload()`
+
+```php
+public function getPayload(string $token): mixed
+```
+
+Validate **and** return the original payload value:
+
+- Scalar payloads → returned as-is.
+- Compact-mode arrays (header `cty=json`) → already `json_decode`d back into an array.
+- Split-mode → returns the value of `paramData` (often `null` since data is spread across many claims). Use `decode()` and inspect `claims()->all()` for split mode.
+
+```php
+$payload = $jwt->getPayload($token);
+```
+
+Throws the same exceptions as `decode()`.
+
+### `isValid()`
 
 ```php
 public function isValid(string $token): bool
 ```
 
-Returns `true` if the token can be parsed **and** passes all configured validation constraints. Returns `false` on any parsing or validation error — never throws.
+`true` iff `tryDecode()` succeeds — never throws.
 
-```php
-if (!$jwt->isValid($bearerToken)) {
-    return $this->response->setStatusCode(401);
-}
-```
-
-Internally reuses the same constraint cache as `decode()`, so there is no double overhead when both methods are called.
-
----
-
-### isExpired()
+### `isExpired()`
 
 ```php
 public function isExpired(string $token): bool
 ```
 
-Checks only the `exp` claim against the current Unix timestamp. Does **not** verify the signature or any other constraint.
+Cheap pre-flight check that inspects only the `exp` claim against `time()`. **Does not verify the signature.** Returns `true` for malformed tokens (defensive: treat unparseable as "no longer valid").
 
-| Return | Meaning |
-|---|---|
-| `false` | Token is not expired (or has no `exp` claim) |
-| `true` | Token is expired, or the token string could not be parsed |
-
-```php
-if ($jwt->isExpired($token)) {
-    // redirect to token refresh flow
-}
-```
-
-> This is intentionally a low-cost check. Use it in scenarios where you have already verified the signature elsewhere and only need to know if the token is still within its lifetime.
-
----
-
-### getTimeToExpiry()
+### `getTimeToExpiry()`
 
 ```php
 public function getTimeToExpiry(string $token): ?int
 ```
 
-Returns the number of seconds until the token expires.
-
-| Return | Meaning |
-|---|---|
-| `int ≥ 0` | Seconds remaining (0 means expired or expires right now) |
-| `null` | Token has no `exp` claim, or could not be parsed |
+Seconds remaining until `exp`, clamped at `0`. Returns `null` if the token cannot be parsed or has no `exp` claim.
 
 ```php
 $ttl = $jwt->getTimeToExpiry($token);
-
 if ($ttl !== null && $ttl < 300) {
-    // Warn client to refresh within the next 5 minutes
+    // warn the client to refresh
 }
 ```
 
----
-
-### extractClaimsUnsafe()
+### `extractClaimsUnsafe()`
 
 ```php
 public function extractClaimsUnsafe(string $token): ?array
 ```
 
-Parses the token and returns all claims as an associative array **without any validation**. Returns `null` if the token string cannot be parsed.
+Returns all claims as an associative array **without any validation**. Returns `null` if the token cannot be parsed.
 
-```php
-$claims = $jwt->extractClaimsUnsafe($token);
+> The library logs a warning each time this method is called unless you explicitly opt in with `Config\JWT::$allowUnsafeExtraction = true`. The flag exists to make accidental production usage visible in logs.
 
-if ($claims !== null) {
-    $userId = $claims['uid'] ?? null;
-}
-```
-
-> **Important:** Use this method only when you have already validated the token through another mechanism, or when you intentionally need to inspect an untrusted token (e.g. to read the issuer before deciding which key to use for verification).
+Use only when you have already verified the token through another mechanism, or when reading metadata (e.g. `iss` / `kid`) before deciding which key to verify with.
 
 ---
 
-### clearCache()
+## Error handling
+
+### `RequiredConstraintsViolated`
+
+Validation failures (signature, claims, expiry, etc.) produce `Lcobucci\JWT\Validation\RequiredConstraintsViolated`. `getMessage()` lists the violated constraints.
+
+### `InvalidTokenException`
+
+Parsing failures (token is not three base64-encoded segments, encryption headers, etc.) produce `Daycry\JWT\Exceptions\InvalidTokenException`.
+
+### `JWTConfigurationException`
+
+Encoding without a configured `signer` / `signingKey` / `issuer` / `audience` / `identifier` produces `Daycry\JWT\Exceptions\JWTConfigurationException` with a message naming the missing field.
+
+### `\JsonException`
+
+`encode()` uses `JSON_THROW_ON_ERROR` for compact-mode arrays. Non-serialisable payloads (resources, recursive references) raise `\JsonException`.
+
+### Combined try/catch
 
 ```php
-public function clearCache(): void
-```
-
-Empties the internal constraint cache. Useful when you change `$config->validateClaims` on an existing `JWT` instance and need to rebuild the constraints.
-
-```php
-$config->validateClaims = ['SignedWith', 'ValidAt'];
-$jwt->clearCache();
-$jwt->decode($token); // constraints rebuilt from the new list
-```
-
-> In normal usage you do not need to call this. Passing a new `JWTConfig` instance to the constructor is the preferred approach.
-
----
-
-## Error Handling
-
-### Exception: `RequiredConstraintsViolated`
-
-All validation failures produce a `Lcobucci\JWT\Validation\RequiredConstraintsViolated` exception. It implements `getMessage()` which returns a human-readable list of the violated constraints.
-
-```php
+use Daycry\JWT\Exceptions\InvalidTokenException;
+use Daycry\JWT\Exceptions\JWTConfigurationException;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 
 try {
     $claims = $jwt->decode($token);
-    // use $claims
+} catch (JWTConfigurationException $e) {
+    // Misconfiguration — operator-facing.
+    log_message('error', $e->getMessage());
+    throw $e;
 } catch (RequiredConstraintsViolated $e) {
-    log_message('warning', 'JWT validation failed: ' . $e->getMessage());
-    return $this->respond(['error' => 'Invalid token'], 401);
-}
-```
-
-### Exception: `\JsonException`
-
-`encode()` uses `JSON_THROW_ON_ERROR` when serialising array payloads. If the data contains non-serialisable values (e.g. `resource` types), a `\JsonException` is thrown.
-
-```php
-try {
-    $token = $jwt->encode($payload);
-} catch (\JsonException $e) {
-    // payload could not be serialised
-}
-```
-
-### Soft errors with `throwable = false`
-
-When you prefer to avoid exceptions entirely, set `$config->throwable = false`. In this mode, `decode()` returns the exception object rather than throwing it:
-
-```php
-$config->throwable = false;
-$result = $jwt->decode($token);
-
-if ($result instanceof RequiredConstraintsViolated) {
-    // handle the error
-} else {
-    echo $result->get('data');
+    return $this->respond(['error' => 'Invalid token', 'detail' => $e->getMessage()], 401);
+} catch (InvalidTokenException $e) {
+    return $this->respond(['error' => 'Bad token'], 400);
 }
 ```
 
 ---
 
-## Middleware Pattern
-
-A common pattern is to build a CodeIgniter 4 filter that authenticates requests via the `Authorization` header:
+## Middleware pattern
 
 ```php
 <?php
@@ -172,7 +135,6 @@ use CodeIgniter\Filters\FilterInterface;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 use Daycry\JWT\JWT;
-use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 
 class JWTAuthFilter implements FilterInterface
 {
@@ -180,82 +142,92 @@ class JWTAuthFilter implements FilterInterface
     {
         $header = $request->getHeaderLine('Authorization');
 
-        if (!str_starts_with($header, 'Bearer ')) {
+        if (! str_starts_with($header, 'Bearer ')) {
             return service('response')->setStatusCode(401)
                 ->setJSON(['error' => 'Missing token']);
         }
 
-        $token = substr($header, 7);
-        $jwt   = new JWT();
+        $token   = substr($header, 7);
+        $decoded = JWT::for()->tryDecode($token);
 
-        try {
-            $claims = $jwt->decode($token);
-            // Store claims for use in the controller
-            $request->claims = $claims;
-        } catch (RequiredConstraintsViolated) {
+        if ($decoded === null) {
             return service('response')->setStatusCode(401)
                 ->setJSON(['error' => 'Invalid token']);
         }
+
+        $request->jwt = $decoded;   // available downstream
     }
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null) {}
 }
 ```
 
-Register it in `app/Config/Filters.php`:
+Register and apply:
 
 ```php
+// app/Config/Filters.php
 public array $aliases = [
     'jwtAuth' => \App\Filters\JWTAuthFilter::class,
 ];
-```
 
-Apply to routes:
-
-```php
 // app/Config/Routes.php
-$routes->group('api', ['filter' => 'jwtAuth'], function($routes) {
+$routes->group('api', ['filter' => 'jwtAuth'], function ($routes) {
     $routes->get('profile', 'ProfileController::index');
 });
 ```
 
 ---
 
-## Multi-Tenant / Per-Request Configuration
+## Multi-tenant / per-request configuration
 
-For applications that issue tokens to multiple audiences with different expiry settings, instantiate a `JWT` object per context rather than sharing a single instance:
+`JWT` is immutable: the `with*()` methods return new instances. Combine with per-call config tweaks for context-specific tokens.
 
 ```php
-function issueShortLivedToken(array $data, string $uid): string
+function issueAccessToken(array $payload, string $uid): string
 {
     $config            = config('JWT');
-    $config->expiresAt = '+15 minutes';
     $config->uid       = $uid;
-    return (new JWT($config))->encode($data);
+    $config->expiresAt = '+15 minutes';
+
+    return (new JWT($config))->encode($payload);
 }
 
-function issueLongLivedRefreshToken(string $uid): string
+function issueRefreshToken(string $uid): string
 {
-    $config            = config('JWT');
-    $config->expiresAt = '+30 days';
-    $config->uid       = $uid;
-    // Narrow constraints: only check signature and exp
-    $config->validateClaims = ['SignedWith', 'ValidAt'];
+    $config                  = config('JWT');
+    $config->uid             = $uid;
+    $config->expiresAt       = '+30 days';
+    $config->validateClaims  = ['SignedWith', 'LooseValidAt']; // narrow validation later
+
     return (new JWT($config))->encode(['type' => 'refresh']);
 }
 ```
 
 ---
 
-## Performance Notes
+## Clock skew (`leeway`)
 
-| Operation | Cost | Detail |
-|---|---|---|
-| `new JWT()` | Negligible | `lcobucci/jwt` `Configuration` is not built until first use |
-| First `encode()` | Medium | Builds and caches the `Configuration` object |
-| Subsequent `encode()` | Low | Reuses cached `Configuration` |
-| First `decode()` | Medium | Builds and caches the constraint list |
-| Subsequent `decode()` | Low | Reuses cached constraints |
-| `isValid()` | Same as `decode()` | Shares the same constraint cache |
-| `isExpired()` | Very low | Parses only the `exp` claim |
-| `extractClaimsUnsafe()` | Very low | Parses token, skips constraint check |
+`LooseValidAt` and `StrictValidAt` accept a leeway. Use it when token issuers and verifiers run on machines with imperfect time sync.
+
+```php
+$config->leeway = 30;            // seconds; applies to iat / nbf / exp
+// or per-call:
+$jwt = JWT::for()->withLeeway(60);
+```
+
+`StrictValidAt` requires `iat`, `nbf` and `exp` to be present **and** within the leeway window. `LooseValidAt` skips checks for any of the three that is missing.
+
+---
+
+## Performance notes
+
+| Operation | Cost |
+|---|---|
+| `new JWT($config)` / `JWT::for()` | Negligible |
+| First `encode()` / `decode()` | Builds the `Configuration` (signer + key load); `LocalFileReference` reads PEMs once per call |
+| `tryDecode()` | Same as `decode()` plus a try/catch wrapper |
+| `getPayload()` | `decode()` + a single `json_decode` |
+| `isExpired()` / `getTimeToExpiry()` | Parse only — no validation |
+| `extractClaimsUnsafe()` | Parse only + warning log |
+
+The library deliberately does not cache validation constraints across calls. The benefit (a few microseconds per request) was not worth the v1.x bug it caused (a frozen clock validating expired tokens as fresh). Build the `JWT` instance on demand; instantiation is cheap.

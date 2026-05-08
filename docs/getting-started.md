@@ -6,7 +6,7 @@
 
 ## Requirements
 
-- PHP **8.1** or higher
+- PHP **8.2** or higher
 - CodeIgniter **4.x**
 - Composer
 
@@ -45,10 +45,12 @@ php spark jwt:key --show
 ### 3. Verify the `.env` entry
 
 ```ini
-jwt.signer = "mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw="
+jwt.signer = "<paste-the-key-generated-above-here>"
 ```
 
-> ⚠️ Never commit your signing key to version control. Add `.env` to `.gitignore`.
+> ⚠️ The library refuses to encode or decode tokens until `jwt.signer` is set
+> to a non-empty base64 string. **Never commit your signing key to version
+> control.** Add `.env` to `.gitignore`.
 
 ---
 

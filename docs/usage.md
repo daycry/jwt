@@ -9,11 +9,25 @@
 ```php
 use Daycry\JWT\JWT;
 
-// Uses config('JWT') resolved from app/Config/JWT.php or .env
-$jwt = new JWT();
+$jwt = JWT::for();           // resolves config('JWT') for you
 
-// Inject a custom config object (useful in tests or multi-tenant scenarios)
+// or, with an explicit config (tests, multi-tenant)
+use Daycry\JWT\Config\JWT as JWTConfig;
+
+$config         = new JWTConfig();
+$config->signer = '...';
+$config->issuer = 'https://api.my-app.com';
+// ...
 $jwt = new JWT($config);
+```
+
+`JWT` is **immutable**: `withSplitData()`, `withParamData()`, `withLeeway()` all return new instances.
+
+```php
+$base    = JWT::for();
+$splitter = $base->withSplitData();      // new instance
+$base->isSplitData();                    // false (unchanged)
+$splitter->isSplitData();                // true
 ```
 
 ---
@@ -21,223 +35,167 @@ $jwt = new JWT($config);
 ## encode()
 
 ```php
-public function encode(mixed $data, ?string $uid = null): string
+public function encode(mixed $data, mixed $uid = null): string
 ```
-
-Produces a signed JWT string.
-
-### Parameters
 
 | Parameter | Type | Description |
 |---|---|---|
-| `$data` | `mixed` | The payload. Scalar, array, or object. |
-| `$uid` | `?string` | Custom `uid` claim value. Defaults to `$config->uid`. |
-
-### Return value
-
-A signed JWT string ready to be sent as a Bearer token.
+| `$data` | `mixed` | Payload. Scalar, array, or object. |
+| `$uid` | `mixed` | Override for the `uid` claim. Defaults to `Config\JWT::$uid`. Pass `0` if you actually want zero — only `null` and `''` skip the claim. |
 
 ### Standard claims added automatically
 
 | Claim | Source |
 |---|---|
-| `iss` | `$config->issuer` |
-| `aud` | `$config->audience` |
-| `jti` | `$config->identifier` |
+| `iss` | `Config\JWT::$issuer` |
+| `aud` | `Config\JWT::$audience` |
+| `jti` | `Config\JWT::$identifier` |
 | `iat` | Current timestamp |
-| `nbf` | `iat + $config->canOnlyBeUsedAfter` |
-| `exp` | `iat + $config->expiresAt` |
-| `type` header | `"Bearer"` |
+| `nbf` | `iat + Config\JWT::$canOnlyBeUsedAfter` |
+| `exp` | `iat + Config\JWT::$expiresAt` |
+| `cty` (header) | `'json'` — only for compact-mode array payloads |
 
 ### Scalar payload
 
-Stored in the `data` claim (or the name set by `setParamData()`):
-
 ```php
-$token = $jwt->encode('hello');
-// claims: { "data": "hello", "uid": null, "iss": ..., ... }
+$token = $jwt->encode('hello');                      // claims: { "data": "hello", ... }
 ```
 
-### Array payload — compact mode (default)
-
-The entire array is JSON-encoded and stored in a single `data` claim:
+### Array payload — compact (default)
 
 ```php
-$token = $jwt->encode(['user_id' => 1, 'role' => 'admin']);
-// claims: { "data": "{\"user_id\":1,\"role\":\"admin\"}", ... }
-
-$claims = $jwt->decode($token);
-$payload = json_decode($claims->get('data'), true);
+$token   = $jwt->encode(['user_id' => 1, 'role' => 'admin']);
+$payload = $jwt->getPayload($token);                 // ['user_id' => 1, 'role' => 'admin']
 ```
+
+The array is JSON-encoded into the single `data` claim (or the name set via `withParamData()`). The token carries header `cty=json` so `getPayload()` can auto-decode it.
 
 ### Array payload — split mode
 
-Each key becomes its own top-level claim:
-
 ```php
-$jwt->setSplitData();
+$jwt   = JWT::for()->withSplitData();
 $token = $jwt->encode(['user_id' => 1, 'role' => 'admin']);
-// claims: { "user_id": 1, "role": "admin", ... }
 
-$claims = $jwt->decode($token);
-echo $claims->get('user_id'); // 1
-echo $claims->get('role');    // "admin"
+$decoded = $jwt->decode($token);
+echo $decoded->claims()->get('role');                // "admin"
 ```
 
-### Custom `uid`
-
-```php
-$token = $jwt->encode($payload, 'user-42');
-// claims: { ..., "uid": "user-42" }
-```
+In split mode each entry becomes its own top-level claim. **Avoid keys that collide with registered claims** (`iss`, `aud`, `exp`, etc.) — `Builder::withClaim()` throws `RegisteredClaimGiven` for those.
 
 ---
 
 ## decode()
 
 ```php
-public function decode(string $data): DataSet|RequiredConstraintsViolated
+public function decode(string $token): \Lcobucci\JWT\Token\Plain
 ```
 
-Parses and optionally validates a JWT string.
+Parses and validates the token. **Always throws** on failure:
 
-### Parameters
-
-| Parameter | Type | Description |
-|---|---|---|
-| `$data` | `string` | A JWT string produced by `encode()` or any compatible issuer. |
-
-### Return value
-
-- **`Lcobucci\JWT\Token\DataSet`** on success — call `->get('claimName')` to read individual claims.
-- **`Lcobucci\JWT\Validation\RequiredConstraintsViolated`** when validation fails and `$config->throwable = false`.
-- Throws **`RequiredConstraintsViolated`** when validation fails and `$config->throwable = true` (default).
-
-### Reading decoded claims
+- `Daycry\JWT\Exceptions\InvalidTokenException` — malformed input.
+- `Lcobucci\JWT\Validation\RequiredConstraintsViolated` — at least one constraint failed.
 
 ```php
-$claims = $jwt->decode($token);
-
-$claims->get('data');          // custom payload claim
-$claims->get('uid');           // uid claim
-$claims->get('iss');           // issuer
-$claims->get('aud');           // audience (returns array)
-$claims->get('jti');           // identifier
-$claims->get('iat');           // issued-at (DateTimeImmutable)
-$claims->get('nbf');           // not-before (DateTimeImmutable)
-$claims->get('exp');           // expires-at (DateTimeImmutable)
-$claims->all();                // all claims as associative array
-```
-
-### Handling validation errors
-
-**With `throwable = true` (default):**
-
-```php
+use Daycry\JWT\Exceptions\InvalidTokenException;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 
 try {
-    $claims = $jwt->decode($token);
+    $token = $jwt->decode($input);
+    echo $token->claims()->get('uid');
 } catch (RequiredConstraintsViolated $e) {
-    // $e->getMessage() describes which constraints failed
-    return $this->response->setStatusCode(401)->setJSON([
-        'error' => 'Unauthorized',
-        'detail' => $e->getMessage(),
-    ]);
+    // signature, issuer, audience, exp, jti…
+} catch (InvalidTokenException $e) {
+    // not a JWT at all
 }
 ```
 
-**With `throwable = false`:**
+### Reading claims and headers
 
 ```php
-$config->throwable = false;
-$jwt    = new JWT($config);
-$result = $jwt->decode($token);
+$decoded = $jwt->decode($token);
 
-if ($result instanceof RequiredConstraintsViolated) {
-    echo $result->getMessage(); // "The token violates some mandatory constraints..."
-} else {
-    $payload = $result->get('data');
+$decoded->claims()->get('uid');          // custom uid
+$decoded->claims()->get('iss');          // issuer
+$decoded->claims()->get('exp');          // DateTimeImmutable
+$decoded->claims()->all();               // associative array
+
+$decoded->headers()->get('alg');         // signing algorithm
+$decoded->headers()->get('cty');         // 'json' if compact-mode array payload
+```
+
+---
+
+## tryDecode()
+
+```php
+public function tryDecode(string $token): ?\Lcobucci\JWT\Token\Plain
+```
+
+Same as `decode()` but returns `null` instead of throwing. Use this in middleware where you want to short-circuit on bad tokens without try/catch.
+
+```php
+$decoded = $jwt->tryDecode($input);
+if ($decoded === null) {
+    return $this->response->setStatusCode(401);
 }
 ```
 
 ---
 
-## setParamData()
+## getPayload()
 
 ```php
-public function setParamData(string $claimName): JWT
+public function getPayload(string $token): mixed
 ```
 
-Changes the claim name used to store scalar and compact-array payloads (default: `'data'`).
+Validate **and** return the original payload value:
+
+- Scalar → returned as is.
+- Compact-mode array (header `cty=json`) → already `json_decode`d back into an array.
+- Split-mode → returns the value of `paramData` (often `null` since data is spread across many claims).
 
 ```php
-$jwt->setParamData('payload');
-$token  = $jwt->encode('hello');
-$claims = $jwt->decode($token);
-
-echo $claims->get('payload'); // "hello"
+$jwt->getPayload($jwt->encode('hello'));                          // "hello"
+$jwt->getPayload($jwt->encode(['x' => 1]));                       // ['x' => 1]
 ```
 
-Returns `$this` for method chaining.
+Throws the same exceptions as `decode()`.
 
 ---
 
-## getParamData()
+## withSplitData() / withParamData() / withLeeway()
+
+Immutable configuration:
 
 ```php
-public function getParamData(): string
+$jwt = JWT::for()
+    ->withSplitData()                  // each array key becomes its own claim
+    ->withParamData('payload')         // change the default 'data' claim name
+    ->withLeeway(30);                  // ±30 seconds of clock skew tolerance
+
+echo $jwt->getParamData();             // 'payload'
+$jwt->isSplitData();                   // true
 ```
 
-Returns the current payload claim name.
+Each call returns a fresh instance — the original is untouched.
 
 ---
 
-## setSplitData()
+## Validation constraints
+
+Controlled by `Config\JWT::$validateClaims`. Allowed values:
+
+| Name | Library class | Notes |
+|---|---|---|
+| `SignedWith` | `Lcobucci\JWT\Validation\Constraint\SignedWith` | Signature verification |
+| `IssuedBy` | `Lcobucci\JWT\Validation\Constraint\IssuedBy` | `iss` |
+| `IdentifiedBy` | `Lcobucci\JWT\Validation\Constraint\IdentifiedBy` | `jti` |
+| `PermittedFor` | `Lcobucci\JWT\Validation\Constraint\PermittedFor` | `aud` |
+| `LooseValidAt` (default) | `Lcobucci\JWT\Validation\Constraint\LooseValidAt` | `iat`/`nbf`/`exp` with leeway |
+| `StrictValidAt` | `Lcobucci\JWT\Validation\Constraint\StrictValidAt` | `iat`/`nbf`/`exp` requiring all three |
+| `ValidAt` (alias) | → `LooseValidAt` | Provided for v1.x config compatibility |
 
 ```php
-public function setSplitData(bool $value = true): JWT
-```
-
-Enables or disables split-array mode. When enabled, array keys are stored as individual top-level claims. When disabled (default), the array is JSON-encoded into a single claim.
-
-```php
-$jwt->setSplitData();           // enable
-$jwt->setSplitData(false);      // disable
-```
-
-Returns `$this` for method chaining.
-
----
-
-## Fluent Interface
-
-`setParamData()` and `setSplitData()` both return `$this`, so they can be chained:
-
-```php
-$token = (new JWT())
-    ->setSplitData()
-    ->setParamData('custom')   // ignored when split mode is on
-    ->encode(['a' => 1, 'b' => 2]);
-```
-
----
-
-## Validation Constraints
-
-The constraints evaluated during `decode()` are controlled by `$config->validateClaims`. See [Configuration — `$validateClaims`](configuration.md#validateclaims) for the full list.
-
-You can change the active constraints at runtime without rebuilding the `JWT` instance — the cache is keyed by the constraint list, so different configurations are handled independently:
-
-```php
-$config = config('JWT');
-
-// Strict — all constraints
-$config->validateClaims = ['SignedWith', 'IssuedBy', 'ValidAt', 'IdentifiedBy', 'PermittedFor'];
-$jwtStrict = new JWT($config);
-
-// Loose — signature only
-$config2 = clone $config;
-$config2->validateClaims = ['SignedWith'];
-$jwtLoose = new JWT($config2);
+$config->validateClaims = ['SignedWith', 'IssuedBy', 'StrictValidAt'];
+$jwt = new JWT($config);
 ```

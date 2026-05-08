@@ -2,7 +2,7 @@
 
 # JWT for CodeIgniter 4
 
-A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt ^4`](https://github.com/lcobucci/jwt).
+A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt ^5`](https://github.com/lcobucci/jwt). Supports HMAC, RSA and ECDSA.
 
 [![Build Status](https://github.com/daycry/jwt/workflows/PHP%20Tests/badge.svg)](https://github.com/daycry/jwt/actions?query=workflow%3A%22PHP+Tests%22)
 [![Coverage Status](https://coveralls.io/repos/github/daycry/jwt/badge.svg?branch=master)](https://coveralls.io/github/daycry/jwt?branch=master)
@@ -15,9 +15,11 @@ A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt
 
 ## Requirements
 
-- PHP **8.1** or higher
+- PHP **8.2** or higher
 - CodeIgniter **4.x**
-- `lcobucci/jwt ^4.0`
+- `lcobucci/jwt ^5.5`
+
+> Upgrading from v1.x? Read the [v1 → v2 migration guide](docs/migration-v1-to-v2.md).
 
 ---
 
@@ -47,147 +49,137 @@ The key is written automatically to `.env` as `jwt.signer`. Use `--show` to prin
 
 ## Quick Start
 
+```bash
+php spark jwt:publish     # write app/Config/JWT.php
+php spark jwt:key         # generate jwt.signer in .env
+```
+
 ```php
 use Daycry\JWT\JWT;
 
-$jwt = new JWT();
+$jwt = JWT::for();   // pulls config('JWT')
 
 // Encode
 $token = $jwt->encode(['user_id' => 42, 'role' => 'admin'], 'user-42');
 
-// Decode & validate
-$claims = $jwt->decode($token);
+// Decode + validate (throws on failure)
+$claims = $jwt->decode($token);                  // Plain
+echo $claims->claims()->get('uid');              // "user-42"
 
-echo $claims->get('data'); // '{"user_id":42,"role":"admin"}'  (compact mode)
-echo $claims->get('uid');  // "user-42"
+// Symmetric helper — get the original payload back
+$payload = $jwt->getPayload($token);             // ['user_id' => 42, 'role' => 'admin']
+
+// Non-throwing alternative
+$claims = $jwt->tryDecode($maybeBadToken);
+if ($claims === null) {
+    return $this->response->setStatusCode(401);
+}
 ```
+
+> The library throws `JWTConfigurationException` if `jwt.signer`, `jwt.issuer`, `jwt.audience`, or `jwt.identifier` is empty. Defaults are intentionally `null` to fail loudly.
 
 ---
 
 ## Configuration
 
-After publishing, edit `app/Config/JWT.php`:
+After publishing, edit `app/Config/JWT.php`. All properties are inherited from `Daycry\JWT\Config\JWT` and overridable via `.env`.
 
-```php
-<?php
-
-namespace Config;
-
-use Daycry\JWT\Config\JWT as BaseJWT;
-
-class JWT extends BaseJWT
-{
-    // Override only what you need — all properties are inherited from BaseJWT.
-}
-```
-
-Key properties (all overridable via `.env`):
-
-| Property | Default | Description |
-|---|---|---|
-| `$signer` | *(base64 string)* | Symmetric signing key |
-| `$algorithm` | `Sha256::class` | HMAC algorithm (`Sha256`, `Sha384`, `Sha512`) |
-| `$issuer` | `http://example.local` | `iss` claim |
-| `$audience` | `http://example.local` | `aud` claim |
-| `$identifier` | `4f1g23a12aa` | `jti` claim |
-| `$expiresAt` | `+24 hour` | Token lifetime (`DateTimeImmutable::modify` string) |
-| `$canOnlyBeUsedAfter` | `+0 minute` | `nbf` offset |
-| `$validate` | `true` | Run validation constraints on `decode()` |
-| `$throwable` | `true` | Throw on validation failure (vs. return the exception) |
-| `$validateClaims` | `[SignedWith, IssuedBy, ValidAt, IdentifiedBy, PermittedFor]` | Active constraints |
-
-`.env` example:
+### HMAC (default)
 
 ```ini
-jwt.signer     = "your-base64-encoded-secret"
-jwt.issuer     = "https://api.my-app.com"
-jwt.audience   = "https://my-app.com"
-jwt.identifier = "my-app-v2"
-jwt.expiresAt  = "+1 hour"
+jwt.algorithmType = "symmetric"
+jwt.signer        = "<base64-secret-from-jwt:key>"
+jwt.issuer        = "https://api.my-app.com"
+jwt.audience      = "https://my-app.com"
+jwt.identifier    = "my-app-v2"
+jwt.expiresAt     = "+1 hour"
+jwt.leeway        = "30"
 ```
+
+### RSA / ECDSA
+
+```bash
+php spark jwt:keypair --algorithm=rsa --bits=2048 --output=writable/keys
+```
+
+```ini
+jwt.algorithmType = "asymmetric"
+jwt.signingKey    = "/var/www/app/writable/keys/jwt-private.pem"
+jwt.verifyingKey  = "/var/www/app/writable/keys/jwt-public.pem"
+jwt.issuer        = "https://api.my-app.com"
+jwt.audience      = "https://my-app.com"
+jwt.identifier    = "my-app-v2"
+```
+
+In `app/Config/JWT.php` set the signer class:
+
+```php
+public string $algorithm = \Lcobucci\JWT\Signer\Rsa\Sha256::class;   // RS256
+// or \Lcobucci\JWT\Signer\Ecdsa\Sha256::class for ES256
+```
+
+See [docs/configuration.md](docs/configuration.md) for the full reference.
 
 ---
 
 ## Usage
 
-### Scalar payload
+### Compact array payload (default)
 
 ```php
-$token  = $jwt->encode('hello');
-$claims = $jwt->decode($token);
+$token = $jwt->encode(['user_id' => 1, 'role' => 'admin']);
 
-echo $claims->get('data'); // "hello"
+$payload = $jwt->getPayload($token);  // ['user_id' => 1, 'role' => 'admin']
 ```
 
-### Array payload — compact (default)
-
-The array is JSON-encoded into a single `data` claim:
+### Split mode — claims at the top level
 
 ```php
-$token  = $jwt->encode(['user_id' => 1, 'role' => 'admin']);
+$jwt   = JWT::for()->withSplitData();
+$token = $jwt->encode(['user_id' => 1, 'role' => 'admin']);
 $claims = $jwt->decode($token);
 
-$payload = json_decode($claims->get('data'), true);
-echo $payload['role']; // "admin"
+echo $claims->claims()->get('role');  // "admin"
 ```
 
-### Array payload — split mode
-
-Each key becomes its own top-level claim:
+### Custom payload claim name
 
 ```php
-$jwt->setSplitData();
-$token  = $jwt->encode(['user_id' => 1, 'role' => 'admin']);
-$claims = $jwt->decode($token);
-
-echo $claims->get('role'); // "admin"
+$jwt = JWT::for()->withParamData('payload');
+$jwt->getPayload($jwt->encode('hello'));  // "hello"
 ```
 
-### Custom claim name
+### Clock skew tolerance (`LooseValidAt`)
 
 ```php
-$jwt->setParamData('payload');
-$token  = $jwt->encode('hello');
-$claims = $jwt->decode($token);
-
-echo $claims->get('payload'); // "hello"
-```
-
-### Custom uid per token
-
-```php
-$token  = $jwt->encode($data, 'user-42');
-$claims = $jwt->decode($token);
-
-echo $claims->get('uid'); // "user-42"
+$jwt = JWT::for()->withLeeway(30); // accept up to ±30s of skew
 ```
 
 ---
 
 ## Error Handling
 
-**Throw on failure (default, `$throwable = true`):**
-
 ```php
+use Daycry\JWT\Exceptions\InvalidTokenException;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 
 try {
     $claims = $jwt->decode($token);
 } catch (RequiredConstraintsViolated $e) {
+    // Signature, issuer, audience, exp, etc.
     return $this->response->setStatusCode(401)->setJSON(['error' => $e->getMessage()]);
+} catch (InvalidTokenException $e) {
+    // Malformed or non-Plain token.
+    return $this->response->setStatusCode(400)->setJSON(['error' => 'Bad token']);
 }
 ```
 
-**Return on failure (`$throwable = false`):**
+For a non-throwing flow:
 
 ```php
-$config->throwable = false;
-$result = (new JWT($config))->decode($token);
-
-if ($result instanceof RequiredConstraintsViolated) {
-    echo $result->getMessage();
-} else {
-    echo $result->get('data');
+$claims = $jwt->tryDecode($token);
+if ($claims === null) {
+    return $this->response->setStatusCode(401);
 }
 ```
 
@@ -197,28 +189,13 @@ if ($result instanceof RequiredConstraintsViolated) {
 
 | Method | Returns | Description |
 |---|---|---|
-| `isValid(string $token)` | `bool` | Validates without decoding; never throws |
-| `isExpired(string $token)` | `bool` | Checks `exp` claim only; no signature check |
-| `getTimeToExpiry(string $token)` | `?int` | Seconds until expiry; `null` if no `exp` claim |
-| `extractClaimsUnsafe(string $token)` | `?array` | All claims as array, **no validation** |
-| `clearCache()` | `void` | Clears the internal constraint cache |
-
-```php
-if ($jwt->isExpired($token)) {
-    // redirect to refresh flow
-}
-
-$ttl = $jwt->getTimeToExpiry($token);
-if ($ttl !== null && $ttl < 300) {
-    // warn client to refresh soon
-}
-
-// Inspect claims without verifying signature
-$claims = $jwt->extractClaimsUnsafe($token);
-$userId = $claims['uid'] ?? null;
-```
-
-> `extractClaimsUnsafe()` skips all validation. Only use it when the token has already been verified elsewhere, or for inspection purposes.
+| `decode(string $token)` | `Plain` | Validates and returns the parsed token. Throws on failure. |
+| `tryDecode(string $token)` | `?Plain` | Same as `decode()` but returns `null` on failure. |
+| `getPayload(string $token)` | `mixed` | Validates + returns the original payload (auto-decoded for compact mode). |
+| `isValid(string $token)` | `bool` | True iff `tryDecode()` succeeds. |
+| `isExpired(string $token)` | `bool` | True for malformed tokens or tokens past `exp`. |
+| `getTimeToExpiry(string $token)` | `?int` | Seconds until `exp`, or `null`. |
+| `extractClaimsUnsafe(string $token)` | `?array` | Claims **without validation**. Logs a warning unless `Config::$allowUnsafeExtraction = true`. |
 
 ---
 
@@ -228,14 +205,14 @@ $userId = $claims['uid'] ?? null;
 # Publish config to app/Config/JWT.php
 php spark jwt:publish
 
-# Generate a 32-byte key and write to .env
+# Generate an HMAC key (default 32 bytes) and write to .env
 php spark jwt:key
-
-# Generate a 64-byte key, display only
 php spark jwt:key 64 --show
-
-# Force overwrite existing key in .env
 php spark jwt:key --force
+
+# Generate an asymmetric key pair
+php spark jwt:keypair --algorithm=rsa   --bits=2048
+php spark jwt:keypair --algorithm=ecdsa --curve=prime256v1 --output=writable/keys
 ```
 
 ---

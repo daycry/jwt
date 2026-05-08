@@ -1,6 +1,6 @@
 # daycry/jwt — Documentation
 
-A high-performance JWT (JSON Web Token) library for **CodeIgniter 4**, built on top of [`lcobucci/jwt ^4`](https://github.com/lcobucci/jwt).
+JWT (JSON Web Token) library for **CodeIgniter 4**, built on top of [`lcobucci/jwt ^5`](https://github.com/lcobucci/jwt). Supports HMAC, RSA and ECDSA.
 
 ---
 
@@ -8,52 +8,58 @@ A high-performance JWT (JSON Web Token) library for **CodeIgniter 4**, built on 
 
 | Document | Description |
 |---|---|
-| [Getting Started](getting-started.md) | Installation, requirements, and a working example in minutes |
-| [Configuration](configuration.md) | Every configuration option explained with defaults and examples |
-| [Usage](usage.md) | Encoding, decoding, validation, and the full public API |
-| [CLI Commands](commands.md) | `jwt:key` and `jwt:publish` — key generation and config publishing |
-| [Advanced](advanced.md) | Utility methods, error handling, caching, and environment variables |
-| [Testing](testing.md) | Running the test suite and understanding the test structure |
+| [Getting Started](getting-started.md) | Installation, requirements, first token in minutes |
+| [Configuration](configuration.md) | Every option explained: HMAC and asymmetric, env-var convention |
+| [Usage](usage.md) | Encoding, decoding, the immutable `with*()` API |
+| [CLI Commands](commands.md) | `jwt:key`, `jwt:keypair`, `jwt:publish` |
+| [Advanced](advanced.md) | `tryDecode`, `getPayload`, `extractClaimsUnsafe`, leeway, error handling |
+| [Testing](testing.md) | Running the test suite |
+| [Migration v1 → v2](migration-v1-to-v2.md) | Upgrade guide from `lcobucci/jwt 4`-based v1.x to the v2.x rewrite |
 
 ---
 
 ## Overview
 
-```
+```bash
 composer require daycry/jwt
+php spark jwt:publish
+php spark jwt:key
 ```
 
 ```php
 use Daycry\JWT\JWT;
 
-$jwt = new JWT();
+$jwt = JWT::for();
 
-// Encode
-$token = $jwt->encode(['user_id' => 42, 'role' => 'admin'], 'user-42');
-
-// Decode
-$claims = $jwt->decode($token);
-echo $claims->get('user_id'); // 42
+$token  = $jwt->encode(['user_id' => 42, 'role' => 'admin'], 'user-42');
+$claims = $jwt->decode($token);                  // Plain — throws on failure
+$payload = $jwt->getPayload($token);              // ['user_id' => 42, 'role' => 'admin']
 ```
 
 ---
 
-## Architecture at a Glance
+## Architecture
 
 ```
 src/
-├── JWT.php               ← Core library class
+├── JWT.php                           ← Immutable facade over lcobucci/jwt
 ├── Config/
-│   └── JWT.php           ← Configuration class (extends BaseConfig)
-└── Commands/
-    ├── JWTGenerateKey.php ← php spark jwt:key
-    └── JWTPublish.php     ← php spark jwt:publish
+│   └── JWT.php                       ← BaseConfig with HMAC + asymmetric fields
+├── Commands/
+│   ├── JWTGenerateKey.php            ← php spark jwt:key       (HMAC secret)
+│   ├── JWTKeyPair.php                ← php spark jwt:keypair   (RSA / ECDSA pair)
+│   └── JWTPublish.php                ← php spark jwt:publish
+└── Exceptions/
+    ├── JWTConfigurationException.php ← Missing/invalid config
+    └── InvalidTokenException.php     ← Malformed token (parse stage)
 ```
 
-The library uses two internal optimisations:
+Design notes:
 
-- **Lazy loading** — the `lcobucci/jwt` `Configuration` object is built only on first use, so constructing a `JWT` instance is cheap.
-- **Constraint caching** — validation constraints are built once per unique `validateClaims` combination and reused on subsequent `decode()` calls.
+- **Immutable instances.** `withSplitData()`, `withParamData()`, `withLeeway()` return new instances — the original is never mutated.
+- **Always-validate.** `decode()` always throws on parse or validation failure. `tryDecode()` returns `?Plain` for non-throwing flows.
+- **Symmetric + asymmetric.** `Config\JWT::$algorithmType` toggles between HMAC (`signer`) and RSA/ECDSA (`signingKey` + `verifyingKey`).
+- **No global state, no caches.** Validation constraints are rebuilt per call; `LooseValidAt` always uses the current clock instead of a frozen one.
 
 ---
 
@@ -61,9 +67,9 @@ The library uses two internal optimisations:
 
 | Dependency | Version |
 |---|---|
-| PHP | `^8.1` |
+| PHP | `^8.2` |
 | CodeIgniter | `^4.0` |
-| lcobucci/jwt | `^4.0` |
+| lcobucci/jwt | `^5.5` |
 
 ---
 

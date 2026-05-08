@@ -6,235 +6,209 @@
 
 ## Overview
 
-Configuration is handled by `Daycry\JWT\Config\JWT` which extends CodeIgniter's `BaseConfig`. After running `php spark jwt:publish` you will find your editable copy at `app/Config/JWT.php`.
+`Daycry\JWT\Config\JWT` extends CodeIgniter's `BaseConfig`. After running `php spark jwt:publish` you get an editable copy at `app/Config/JWT.php`.
+
+All values are also overridable through `.env` using the standard CI4 dot-notation convention: `jwt.{property}`.
+
+The library refuses to operate when required fields are missing — it throws `Daycry\JWT\Exceptions\JWTConfigurationException`. There are **no insecure defaults**.
 
 ---
 
-## Full Reference
+## Required fields
 
-### `$signer`
+| Property | Required for | Default |
+|---|---|---|
+| `$signer` | symmetric (HMAC) | `null` |
+| `$signingKey` + `$verifyingKey` | asymmetric (RSA / ECDSA) | `null` |
+| `$issuer` | always | `null` |
+| `$audience` | always | `null` |
+| `$identifier` | always | `null` |
 
-| Type | Default |
-|---|---|
-| `string` | `'mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw='` |
-
-**Base64-encoded** symmetric signing key. This is the secret used to sign and verify every token.
-
-Generate a production-grade key with:
-
-```bash
-php spark jwt:key        # writes to .env automatically
-php spark jwt:key --show # print only, useful for copy-paste
-```
-
-Override via `.env`:
-
-```ini
-jwt.signer = "your-base64-encoded-secret"
-```
-
-> ⚠️ Keep this value secret. Rotate it if you suspect it has been compromised (all existing tokens will immediately become invalid).
+The first call to `encode()` / `decode()` with any of these unset throws `JWTConfigurationException::missingClaim('...')` with a message that names the missing field.
 
 ---
+
+## Algorithm selection
+
+### `$algorithmType`
+
+`'symmetric'` (default) or `'asymmetric'`. Drives which key fields are read.
 
 ### `$algorithm`
 
-| Type | Default |
+The signer class. Pick one matching `$algorithmType`:
+
+| Algorithm | Class |
 |---|---|
-| `string` | `\Lcobucci\JWT\Signer\Hmac\Sha256::class` |
-
-The signing algorithm class. The library supports the following symmetric HMAC algorithms:
-
-| Class | Strength |
-|---|---|
-| `\Lcobucci\JWT\Signer\Hmac\Sha256::class` | 256-bit (recommended) |
-| `\Lcobucci\JWT\Signer\Hmac\Sha384::class` | 384-bit |
-| `\Lcobucci\JWT\Signer\Hmac\Sha512::class` | 512-bit |
-
-```php
-// app/Config/JWT.php
-public string $algorithm = \Lcobucci\JWT\Signer\Hmac\Sha512::class;
-```
+| HMAC SHA-256 (HS256) | `\Lcobucci\JWT\Signer\Hmac\Sha256::class` |
+| HMAC SHA-384 (HS384) | `\Lcobucci\JWT\Signer\Hmac\Sha384::class` |
+| HMAC SHA-512 (HS512) | `\Lcobucci\JWT\Signer\Hmac\Sha512::class` |
+| RSA SHA-256 (RS256) | `\Lcobucci\JWT\Signer\Rsa\Sha256::class` |
+| RSA SHA-384 (RS384) | `\Lcobucci\JWT\Signer\Rsa\Sha384::class` |
+| RSA SHA-512 (RS512) | `\Lcobucci\JWT\Signer\Rsa\Sha512::class` |
+| ECDSA P-256 (ES256) | `\Lcobucci\JWT\Signer\Ecdsa\Sha256::class` |
+| ECDSA P-384 (ES384) | `\Lcobucci\JWT\Signer\Ecdsa\Sha384::class` |
+| ECDSA P-521 (ES512) | `\Lcobucci\JWT\Signer\Ecdsa\Sha512::class` |
 
 ---
 
-### `$issuer`
+## Symmetric (HMAC) keys
 
-| Type | Default |
-|---|---|
-| `string` | `'http://example.local'` |
+### `$signer`
 
-The token issuer (`iss` claim). Typically the URL of the service that generates the token.
+Base64-encoded secret. Generate one with:
 
-```php
-public string $issuer = 'https://api.my-app.com';
+```bash
+php spark jwt:key             # writes to .env
+php spark jwt:key 64 --show   # 64-byte key, print only
 ```
+
+```ini
+jwt.signer = "<paste-the-key-from-jwt:key>"
+```
+
+> Rotating the key invalidates **all** outstanding tokens.
 
 ---
 
-### `$audience`
+## Asymmetric (RSA / ECDSA) keys
 
-| Type | Default |
-|---|---|
-| `string` | `'http://example.local'` |
+### `$signingKey` / `$verifyingKey`
 
-The intended audience (`aud` claim). Typically the URL of the service that consumes the token.
+Either a filesystem path (preferred) or the raw PEM contents. Generate with:
 
-```php
-public string $audience = 'https://my-app.com';
+```bash
+php spark jwt:keypair --algorithm=rsa   --bits=2048
+php spark jwt:keypair --algorithm=ecdsa --curve=prime256v1
 ```
+
+```ini
+jwt.algorithmType = "asymmetric"
+jwt.signingKey    = "/var/www/app/writable/keys/jwt-private.pem"
+jwt.verifyingKey  = "/var/www/app/writable/keys/jwt-public.pem"
+```
+
+A path under `WRITEPATH` works out of the box; alternatively prefix with `file://` or pass the literal PEM string.
+
+### `$passphrase`
+
+Set if the private key is encrypted. Used only when reading `$signingKey`. Leave `null` for unencrypted keys.
 
 ---
 
-### `$identifier`
+## Claims
 
-| Type | Default |
-|---|---|
-| `string` | `'4f1g23a12aa'` |
+### `$issuer` (`iss`)
 
-A unique identifier for this application (`jti` claim). Change this to something meaningful for your project.
+URL of the token-issuing service.
 
-```php
-public string $identifier = 'my-app-v2';
-```
+### `$audience` (`aud`)
 
----
+URL of the consuming service. Tokens whose `aud` does not include this value are rejected.
+
+### `$identifier` (`jti`)
+
+Application-specific identifier. Tokens with a different `jti` are rejected.
 
 ### `$uid`
 
-| Type | Default |
-|---|---|
-| `?string` | `null` |
+Default value for the custom `uid` claim. Set per-call via `JWT::encode($data, $uid)`.
 
-Default subject identifier stored as a custom `uid` claim. Can be overridden per token via the second argument of `encode()`. When `null`, no `uid` claim is added unless explicitly provided at encode time.
+### `$canOnlyBeUsedAfter` / `$expiresAt`
+
+`DateTimeImmutable::modify()` strings. Defaults: `+0 minute` / `+24 hour`.
 
 ```php
-public ?string $uid = 'global-app-uid';
+public string $expiresAt = '+15 minutes'; // short-lived access token
 ```
+
+If `canOnlyBeUsedAfter` resolves to a moment after `iat`, it is clamped to `iat` so freshly-issued tokens are immediately usable.
 
 ---
 
-### `$canOnlyBeUsedAfter`
-
-| Type | Default |
-|---|---|
-| `string` | `'+0 minute'` |
-
-The not-before offset (`nbf` claim), expressed as a `DateTimeImmutable::modify()` string. The token cannot be used before `issuedAt + offset`.
-
-```php
-public string $canOnlyBeUsedAfter = '+5 seconds'; // grace period
-```
-
-> **Note:** If the computed `nbf` timestamp would be in the future relative to `iat`, the library resets it to `iat` to prevent immediate rejection.
-
----
-
-### `$expiresAt`
-
-| Type | Default |
-|---|---|
-| `string` | `'+24 hour'` |
-
-Token lifetime (`exp` claim), expressed as a `DateTimeImmutable::modify()` string.
-
-```php
-public string $expiresAt = '+1 hour';    // short-lived access token
-public string $expiresAt = '+30 days';   // long-lived refresh token
-```
-
----
+## Validation
 
 ### `$validate`
 
-| Type | Default |
-|---|---|
-| `bool` | `true` |
-
-When `true`, `decode()` runs all constraints in `$validateClaims` against the token. Set to `false` to parse tokens without any validation (e.g. for debugging).
-
-```php
-public bool $validate = false; // disable validation globally
-```
-
----
-
-### `$throwable`
-
-| Type | Default |
-|---|---|
-| `bool` | `true` |
-
-Controls what happens when validation fails inside `decode()`:
-
-| Value | Behaviour |
-|---|---|
-| `true` | Throws `Lcobucci\JWT\Validation\RequiredConstraintsViolated` |
-| `false` | Returns the exception object instead of throwing it |
-
-```php
-public bool $throwable = false; // return the error, don't throw
-```
-
----
+`true` (default): `decode()` runs every constraint in `$validateClaims`.
+`false`: parsing only — **never use in production**.
 
 ### `$validateClaims`
 
-| Type | Default |
-|---|---|
-| `array` | `['SignedWith', 'IssuedBy', 'ValidAt', 'IdentifiedBy', 'PermittedFor']` |
+Ordered list of constraint names. Defaults: `['SignedWith', 'IssuedBy', 'LooseValidAt', 'IdentifiedBy', 'PermittedFor']`.
 
-An ordered list of constraint names to evaluate during `decode()`. Each string maps to one of the following:
+Allowed values:
 
-| Name | Validates |
-|---|---|
-| `'SignedWith'` | Token signature matches the configured key and algorithm |
-| `'IssuedBy'` | `iss` claim equals `$issuer` |
-| `'ValidAt'` | Current time is inside `[nbf, exp]` window |
-| `'IdentifiedBy'` | `jti` claim equals `$identifier` |
-| `'PermittedFor'` | `aud` claim contains `$audience` |
+| Name | Library class | Notes |
+|---|---|---|
+| `SignedWith` | `Lcobucci\JWT\Validation\Constraint\SignedWith` | Signature verification |
+| `IssuedBy` | `IssuedBy` | `iss` |
+| `IdentifiedBy` | `IdentifiedBy` | `jti` |
+| `PermittedFor` | `PermittedFor` | `aud` |
+| `LooseValidAt` (default) | `LooseValidAt` | `iat`/`nbf`/`exp` with leeway, missing claims tolerated |
+| `StrictValidAt` | `StrictValidAt` | `iat`/`nbf`/`exp` all required |
+| `ValidAt` | alias of `LooseValidAt` | Provided for v1.x compatibility |
 
-Remove entries to skip individual checks:
+### `$leeway`
+
+Acceptable clock skew in seconds for `LooseValidAt` / `StrictValidAt`. `0` (default) means strict; `null` also disables leeway.
 
 ```php
-public array $validateClaims = [
-    'SignedWith',
-    'ValidAt',
-    // IssuedBy, IdentifiedBy and PermittedFor are skipped
-];
+public ?int $leeway = 30;   // accept ±30 s of skew
 ```
+
+Leeway can also be applied per-call: `$jwt->withLeeway(60)`.
 
 ---
 
-## Environment Variable Overrides
+## Other flags
 
-CodeIgniter maps `.env` keys to config properties using dot notation. The following keys are supported:
+### `$allowUnsafeExtraction`
+
+`false` (default): every call to `JWT::extractClaimsUnsafe()` writes a warning to the framework logger so accidental production use shows up. Set to `true` if you intentionally rely on the method (token inspection tools, etc.).
+
+---
+
+## `.env` reference
 
 ```ini
-jwt.signer    = "base64-encoded-secret"
-jwt.issuer    = "https://api.my-app.com"
-jwt.audience  = "https://my-app.com"
-jwt.identifier = "my-app-v2"
-jwt.expiresAt = "+2 hours"
-jwt.algorithm = "Lcobucci\\JWT\\Signer\\Hmac\\Sha256"
-jwt.throwable = true
-jwt.validate  = true
+# Algorithm
+jwt.algorithmType = "symmetric"
+jwt.algorithm     = "Lcobucci\\JWT\\Signer\\Hmac\\Sha256"
+
+# Symmetric secret
+jwt.signer        = "<base64-secret>"
+
+# Asymmetric (when algorithmType=asymmetric)
+jwt.signingKey    = "/path/to/private.pem"
+jwt.verifyingKey  = "/path/to/public.pem"
+jwt.passphrase    = ""
+
+# Claims
+jwt.issuer        = "https://api.my-app.com"
+jwt.audience      = "https://my-app.com"
+jwt.identifier    = "my-app-v2"
+
+# Lifetime
+jwt.canOnlyBeUsedAfter = "+0 minute"
+jwt.expiresAt          = "+1 hour"
+
+# Validation
+jwt.validate              = true
+jwt.leeway                = 30
+jwt.allowUnsafeExtraction = false
 ```
 
 ---
 
-## Programmatic Override
-
-You can override any setting at runtime by passing a configured `JWTConfig` instance to the constructor:
+## Programmatic override
 
 ```php
 use Daycry\JWT\JWT;
-use Daycry\JWT\Config\JWT as JWTConfig;
 
-$config            = config('JWT');   // load base config
-$config->expiresAt = '+5 minutes';   // tighten expiry for a specific token
+$config            = config('JWT');
+$config->expiresAt = '+5 minutes';
 $config->uid       = (string) $userId;
 
-$jwt   = new JWT($config);
-$token = $jwt->encode($payload);
+$token = (new JWT($config))->encode($payload);
 ```

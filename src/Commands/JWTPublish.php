@@ -5,7 +5,8 @@ namespace Daycry\JWT\Commands;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 use Config\Autoload;
-use Exception;
+use RuntimeException;
+use Throwable;
 
 class JWTPublish extends BaseCommand
 {
@@ -13,78 +14,103 @@ class JWTPublish extends BaseCommand
     protected $name        = 'jwt:publish';
     protected $description = 'JWT config file publisher.';
 
-    /**
-     * The path to Daycry\RestServer\src directory.
-     *
-     * @var string
-     */
-    protected $sourcePath;
+    protected string $sourcePath = '';
 
-    // --------------------------------------------------------------------
-    /**
-     * Copy config file
-     */
-    public function run(array $params)
+    public function run(array $params): int
     {
-        $this->determineSourcePath();
-        $this->publishConfig();
+        try {
+            $this->determineSourcePath();
+            if ($this->publishConfig() === false) {
+                return EXIT_USER_INPUT;
+            }
+        } catch (RuntimeException $e) {
+            CLI::error($e->getMessage());
+
+            return EXIT_ERROR;
+        } catch (Throwable $e) {
+            CLI::error('Unexpected error: ' . $e->getMessage());
+
+            return EXIT_ERROR;
+        }
+
         CLI::write('Config file was successfully generated.', 'green');
+
+        return EXIT_SUCCESS;
     }
 
-    // --------------------------------------------------------------------
     /**
-     * Determines the current source path from which all other files are located.
+     * Determine the package source directory.
+     *
+     * @throws RuntimeException When the source path cannot be resolved.
      */
-    protected function determineSourcePath()
+    protected function determineSourcePath(): void
     {
-        $this->sourcePath = realpath(__DIR__ . '/../');
-        if ($this->sourcePath === '/' || empty($this->sourcePath)) {
-            CLI::error('Unable to determine the correct source directory. Bailing.');
+        $resolved = realpath(__DIR__ . '/../');
 
-            exit();
+        if ($resolved === false || $resolved === '/') {
+            throw new RuntimeException('Unable to determine the correct source directory.');
         }
+
+        $this->sourcePath = $resolved;
     }
 
-    // --------------------------------------------------------------------
     /**
-     * Publish config file.
+     * Copy and rewrite the bundled config file into the application.
+     *
+     * @return bool True on write, false when the user declined to overwrite.
      */
-    protected function publishConfig()
+    protected function publishConfig(): bool
     {
-        $path    = $this->sourcePath . '/Config/JWT.php';
-        $content = file_get_contents($path);
-        $content = str_replace('namespace Daycry\JWT\Config', 'namespace Config', $content);
-        $content = str_replace('extends BaseConfig', 'extends \Daycry\JWT\Config\JWT', $content);
-        $this->writeFile('Config/JWT.php', $content);
+        $path     = $this->sourcePath . '/Config/JWT.php';
+        $contents = file_get_contents($path);
+
+        if ($contents === false) {
+            throw new RuntimeException("Unable to read source config at {$path}");
+        }
+
+        $contents = str_replace('namespace Daycry\JWT\Config', 'namespace Config', $contents);
+        $contents = str_replace('extends BaseConfig', 'extends \Daycry\JWT\Config\JWT', $contents);
+
+        return $this->writeFile('Config/JWT.php', $contents);
     }
 
-    // --------------------------------------------------------------------
     /**
-     * Write a file, catching any exceptions and showing a nicely formatted error.
+     * Write the published file into the application namespace.
+     *
+     * @return bool True on write, false when the user declined.
+     *
+     * @throws RuntimeException When the destination cannot be written.
      */
-    protected function writeFile(string $path, string $content)
+    protected function writeFile(string $path, string $content): bool
     {
-        $config    = new Autoload();
-        $appPath   = $config->psr4[APP_NAMESPACE];
+        $autoload = new Autoload();
+        $appPath  = $autoload->psr4[APP_NAMESPACE];
+        if (is_array($appPath)) {
+            $appPath = $appPath[0];
+        }
         $directory = dirname($appPath . $path);
-        if (! is_dir($directory)) {
-            mkdir($directory, 0777, true);
+
+        if (! is_dir($directory) && ! mkdir($directory, 0777, true) && ! is_dir($directory)) {
+            throw new RuntimeException("Cannot create directory: {$directory}");
         }
-        if (file_exists($appPath . $path) && CLI::prompt('Config file already exists, do you want to replace it?', ['y', 'n']) === 'n') {
+
+        if (
+            file_exists($appPath . $path)
+            && CLI::prompt('Config file already exists, do you want to replace it?', ['y', 'n']) === 'n'
+        ) {
             CLI::error('Cancelled');
 
-            exit();
+            return false;
         }
 
-        try {
-            write_file($appPath . $path, $content);
-        } catch (Exception $e) {
-            $this->showError($e);
-
-            exit();
+        $written = file_put_contents($appPath . $path, $content);
+        if ($written === false) {
+            throw new RuntimeException("Failed to write file: {$appPath}{$path}");
         }
-        $path = str_replace($appPath, '', $path);
-        CLI::write(CLI::color('Created: ', 'yellow') . $path);
+
+        $relative = str_replace($appPath, '', $path);
+        CLI::write(CLI::color('Created: ', 'yellow') . $relative);
+
+        return true;
     }
-    // --------------------------------------------------------------------
 }
