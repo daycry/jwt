@@ -62,6 +62,15 @@
       <code><![CDATA[LoggerConfig]]></code>
     </UndefinedClass>
   </file>
+  <file src="tests/Commands/JWTKeyPairWriteKeyFileTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+      <code><![CDATA[protected function tearDown(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedClass>
+      <code><![CDATA[LoggerConfig]]></code>
+    </UndefinedClass>
+  </file>
   <file src="tests/Commands/JWTPublishTest.php">
     <MissingOverrideAttribute>
       <code><![CDATA[protected function determineSourcePath(): void]]></code>

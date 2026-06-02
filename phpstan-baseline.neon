@@ -43,31 +43,7 @@ parameters:
 			path: src/JWT.php
 
 		-
-			message: '#^Parameter \#1 \$audience of class Lcobucci\\JWT\\Validation\\Constraint\\PermittedFor constructor expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
 			message: '#^Parameter \#1 \$contents of static method Lcobucci\\JWT\\Signer\\Key\\InMemory\:\:plainText\(\) expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
-			message: '#^Parameter \#1 \$id of class Lcobucci\\JWT\\Validation\\Constraint\\IdentifiedBy constructor expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
-			message: '#^Parameter \#1 \$id of method Lcobucci\\JWT\\Builder\:\:identifiedBy\(\) expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
-			message: '#^Parameter \#1 \$issuer of method Lcobucci\\JWT\\Builder\:\:issuedBy\(\) expects non\-empty\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/JWT.php
@@ -86,30 +62,6 @@ parameters:
 
 		-
 			message: '#^Parameter \#1 \$path of static method Lcobucci\\JWT\\Signer\\Key\\InMemory\:\:file\(\) expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
-			message: '#^Parameter \#1 \$signer of static method Lcobucci\\JWT\\Configuration\:\:forAsymmetricSigner\(\) expects Lcobucci\\JWT\\Signer, object given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
-			message: '#^Parameter \#1 \$signer of static method Lcobucci\\JWT\\Configuration\:\:forSymmetricSigner\(\) expects Lcobucci\\JWT\\Signer, object given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
-			message: '#^Parameter \#1 \.\.\.\$audiences of method Lcobucci\\JWT\\Builder\:\:permittedFor\(\) expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/JWT.php
-
-		-
-			message: '#^Parameter \#1 \.\.\.\$issuers of class Lcobucci\\JWT\\Validation\\Constraint\\IssuedBy constructor expects non\-empty\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/JWT.php
@@ -231,5 +183,5 @@ parameters:
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''Lcobucci\\\\JWT\\\\Token\\\\Plain'' and Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
-			count: 3
+			count: 4
 			path: tests/Validators/SecurityTest.php

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Daycry\JWT\Exceptions;
 
 use RuntimeException;
@@ -23,11 +25,31 @@ class JWTConfigurationException extends RuntimeException
         );
     }
 
+    public static function missingSignatureConstraint(): self
+    {
+        return new self(
+            'JWT signature validation is disabled: "SignedWith" is missing from '
+            . 'Daycry\\JWT\\Config\\JWT::$validateClaims. Add "SignedWith" to verify token '
+            . 'signatures, or set Daycry\\JWT\\Config\\JWT::$validate = false to decode without validation.',
+        );
+    }
+
     public static function invalidAlgorithmType(string $value): self
     {
         return new self(sprintf(
             'Daycry\\JWT\\Config\\JWT::$algorithmType must be "symmetric" or "asymmetric"; "%s" given.',
             $value,
+        ));
+    }
+
+    public static function algorithmMismatch(string $algorithmType, string $signerClass): self
+    {
+        return new self(sprintf(
+            'Daycry\\JWT\\Config\\JWT::$algorithm "%s" is not compatible with $algorithmType "%s". '
+            . 'Use an HMAC signer (Lcobucci\\JWT\\Signer\\Hmac\\*) for "symmetric", or an RSA/ECDSA '
+            . 'signer (Lcobucci\\JWT\\Signer\\Rsa\\* or \\Ecdsa\\*) for "asymmetric".',
+            $signerClass,
+            $algorithmType,
         ));
     }
 

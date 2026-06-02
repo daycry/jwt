@@ -7,6 +7,7 @@ namespace Tests\Validators;
 use CodeIgniter\Test\CIUnitTestCase;
 use Daycry\JWT\Config\JWT as JWTConfig;
 use Daycry\JWT\JWT;
+use Lcobucci\JWT\Signer;
 use Lcobucci\JWT\Signer\Ecdsa\Sha256 as EcdsaSha256;
 use Lcobucci\JWT\Signer\Rsa\Sha256 as RsaSha256;
 use Lcobucci\JWT\Token\Plain;
@@ -95,6 +96,9 @@ final class AsymmetricTest extends CIUnitTestCase
         return [$privatePath, $publicPath];
     }
 
+    /**
+     * @param class-string<Signer> $algorithm
+     */
     private function buildAsymmetricConfig(string $algorithm, string $signingKey, string $verifyingKey): JWTConfig
     {
         $config                = new JWTConfig();
@@ -133,6 +137,30 @@ final class AsymmetricTest extends CIUnitTestCase
         $decoded = $jwt->decode($token);
 
         $this->assertSame('admin', $decoded->claims()->get('data'));
+    }
+
+    public function testRsaRoundTripWithFileUriPrefix(): void
+    {
+        [$private, $public] = $this->generateRsaKeyPair();
+        $config             = $this->buildAsymmetricConfig(RsaSha256::class, 'file://' . $private, 'file://' . $public);
+        $jwt                = new JWT($config);
+
+        $token = $jwt->encode('admin');
+        $this->assertSame('admin', $jwt->decode($token)->claims()->get('data'));
+    }
+
+    public function testRsaRoundTripWithRawPemContents(): void
+    {
+        [$private, $public] = $this->generateRsaKeyPair();
+        $config             = $this->buildAsymmetricConfig(
+            RsaSha256::class,
+            (string) file_get_contents($private),
+            (string) file_get_contents($public),
+        );
+        $jwt = new JWT($config);
+
+        $token = $jwt->encode('admin');
+        $this->assertSame('admin', $jwt->decode($token)->claims()->get('data'));
     }
 
     public function testRsaTokenSignedWithDifferentKeyFails(): void

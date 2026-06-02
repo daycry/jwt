@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Tests\Validators;
 
 use CodeIgniter\Test\CIUnitTestCase;
+use DateTimeImmutable;
 use Daycry\JWT\Config\JWT as JWTConfig;
 use Daycry\JWT\Exceptions\InvalidTokenException;
 use Daycry\JWT\Exceptions\JWTConfigurationException;
 use Daycry\JWT\JWT;
+use InvalidArgumentException;
+use Lcobucci\JWT\Configuration;
+use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Signer\Rsa\Sha256;
 use Lcobucci\JWT\Token\Plain;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 use stdClass;
@@ -211,6 +216,17 @@ final class SecurityTest extends CIUnitTestCase
         $this->assertSame(0, $decoded->claims()->get('uid'));
     }
 
+    public function testIntegerUidFromConfigIsPreserved(): void
+    {
+        $this->config->uid = 99;
+        $jwt               = new JWT($this->config);
+
+        $token   = $jwt->encode('payload');
+        $decoded = $jwt->decode($token);
+
+        $this->assertSame(99, $decoded->claims()->get('uid'));
+    }
+
     public function testInvalidAlgorithmTypeIsRejected(): void
     {
         $this->config->algorithmType = 'magic';
@@ -242,6 +258,62 @@ final class SecurityTest extends CIUnitTestCase
         $this->expectException(JWTConfigurationException::class);
         $this->expectExceptionMessage('"issuer"');
         $jwt->encode('payload');
+    }
+
+    public function testEmptyIssuerIsRejected(): void
+    {
+        $this->config->issuer = '';
+        $jwt                  = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('"issuer"');
+        $jwt->encode('payload');
+    }
+
+    public function testEmptyAudienceIsRejected(): void
+    {
+        $this->config->audience = '';
+        $jwt                    = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('"audience"');
+        $jwt->encode('payload');
+    }
+
+    public function testEmptyIdentifierIsRejected(): void
+    {
+        $this->config->identifier = '';
+        $jwt                      = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('"identifier"');
+        $jwt->encode('payload');
+    }
+
+    public function testDecodeRejectsValidateClaimsWithoutSignedWith(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        $this->config->validateClaims = ['IssuedBy', 'LooseValidAt'];
+        $verifier                     = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('SignedWith');
+        $verifier->decode($token);
+    }
+
+    public function testValidateFalseLogsWarningOnDecode(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        $this->config->validate = false;
+        $verifier               = new JWT($this->config);
+        $decoded                = $verifier->decode($token);
+
+        $this->assertInstanceOf(Plain::class, $decoded);
+        $this->assertLogContains('warning', 'validate = false');
     }
 
     public function testStrictValidAtRequiresAllTimeClaims(): void
@@ -341,6 +413,31 @@ final class SecurityTest extends CIUnitTestCase
         $claims = $jwt->extractClaimsUnsafe($token);
 
         $this->assertNotNull($claims);
+        $this->assertLogContains('warning', 'extractClaimsUnsafe()');
+    }
+
+    public function testAsymmetricTypeWithHmacAlgorithmIsRejected(): void
+    {
+        $this->config->algorithmType = 'asymmetric';
+        $this->config->signingKey    = 'dummy-private';
+        $this->config->verifyingKey  = 'dummy-public';
+        // $algorithm stays the default Hmac\Sha256 — incompatible with asymmetric.
+        $jwt = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('not compatible');
+        $jwt->encode('payload');
+    }
+
+    public function testSymmetricTypeWithAsymmetricAlgorithmIsRejected(): void
+    {
+        $this->config->algorithm = Sha256::class;
+        // algorithmType stays 'symmetric' — incompatible with an RSA signer.
+        $jwt = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('not compatible');
+        $jwt->encode('payload');
     }
 
     public function testAsymmetricConfigRejectsMissingSigningKey(): void
@@ -364,6 +461,81 @@ final class SecurityTest extends CIUnitTestCase
         $this->expectException(JWTConfigurationException::class);
         $this->expectExceptionMessage('"verifyingKey"');
         $jwt->encode('payload');
+    }
+
+    public function testEncodeThrowsOnInvalidExpiresAtModifier(): void
+    {
+        $this->config->expiresAt = 'not a real modifier';
+        $jwt                     = new JWT($this->config);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('expiresAt');
+        $jwt->encode('payload');
+    }
+
+    public function testEncodeThrowsOnInvalidCanOnlyBeUsedAfterModifier(): void
+    {
+        $this->config->canOnlyBeUsedAfter = 'not a real modifier';
+        $jwt                              = new JWT($this->config);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('canOnlyBeUsedAfter');
+        $jwt->encode('payload');
+    }
+
+    public function testFutureCanOnlyBeUsedAfterIsClampedToIssuance(): void
+    {
+        $this->config->canOnlyBeUsedAfter = '+1 day';
+        $jwt                              = new JWT($this->config);
+        $token                            = $jwt->encode('payload');
+
+        // Clamped to iat, so the token is immediately valid rather than "not yet valid".
+        $decoded = $jwt->decode($token);
+        $this->assertSame('payload', $decoded->claims()->get('data'));
+        $this->assertSame(
+            $decoded->claims()->get('iat')->getTimestamp(),
+            $decoded->claims()->get('nbf')->getTimestamp(),
+        );
+    }
+
+    public function testIsExpiredAndTtlAreLenientForTokenWithoutExpClaim(): void
+    {
+        $token = $this->encodeTokenWithoutExpiry('payload');
+        $jwt   = new JWT($this->config);
+
+        $this->assertFalse($jwt->isExpired($token));
+        $this->assertNull($jwt->getTimeToExpiry($token));
+    }
+
+    private function encodeTokenWithoutExpiry(string $data): string
+    {
+        $signer     = $this->config->signer;
+        $issuer     = $this->config->issuer;
+        $audience   = $this->config->audience;
+        $identifier = $this->config->identifier;
+
+        if (
+            $signer === null || $signer === ''
+                             || $issuer === null || $issuer === ''
+                             || $audience === null || $audience === ''
+                             || $identifier === null || $identifier === ''
+        ) {
+            $this->fail('JWT test config is incomplete.');
+        }
+
+        $configuration = Configuration::forSymmetricSigner(
+            new \Lcobucci\JWT\Signer\Hmac\Sha256(),
+            InMemory::base64Encoded($signer),
+        );
+
+        return $configuration->builder()
+            ->issuedBy($issuer)
+            ->permittedFor($audience)
+            ->identifiedBy($identifier)
+            ->issuedAt(new DateTimeImmutable())
+            ->withClaim('data', $data)
+            ->getToken($configuration->signer(), $configuration->signingKey())
+            ->toString();
     }
 
     private function mutateSignature(string $token): string

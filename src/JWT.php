@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Daycry\JWT;
 
 use DateInterval;
@@ -10,8 +12,11 @@ use Daycry\JWT\Exceptions\JWTConfigurationException;
 use InvalidArgumentException;
 use Lcobucci\Clock\SystemClock;
 use Lcobucci\JWT\Configuration;
+use Lcobucci\JWT\Signer;
+use Lcobucci\JWT\Signer\Hmac;
 use Lcobucci\JWT\Signer\Key;
 use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Signer\OpenSSL;
 use Lcobucci\JWT\Token\Plain;
 use Lcobucci\JWT\Validation\Constraint;
 use Lcobucci\JWT\Validation\Constraint\IdentifiedBy;
@@ -40,6 +45,7 @@ final class JWT
     private string $paramData = 'data';
 
     private ?int $leewaySeconds;
+    private ?string $expiresAtOverride = null;
 
     public function __construct(private JWTConfig $config)
     {
@@ -73,13 +79,30 @@ final class JWT
         return $clone;
     }
 
-    public function withLeeway(int $seconds): self
+    public function withLeeway(?int $seconds): self
     {
-        if ($seconds < 0) {
+        if ($seconds !== null && $seconds < 0) {
             throw new InvalidArgumentException('Leeway cannot be negative.');
         }
         $clone                = clone $this;
         $clone->leewaySeconds = $seconds;
+
+        return $clone;
+    }
+
+    /**
+     * Override the configured `expiresAt` modifier for this instance only.
+     *
+     * Enables short-lived access tokens without mutating the shared config:
+     * `JWT::for()->withExpiresAt('+5 minutes')->encode($data)`.
+     */
+    public function withExpiresAt(string $modifier): self
+    {
+        if ($modifier === '') {
+            throw new InvalidArgumentException('expiresAt modifier cannot be empty.');
+        }
+        $clone                    = clone $this;
+        $clone->expiresAtOverride = $modifier;
 
         return $clone;
     }
@@ -94,14 +117,14 @@ final class JWT
         return $this->split;
     }
 
-    public function encode(mixed $data, mixed $uid = null): string
+    public function encode(mixed $data, int|string|null $uid = null): string
     {
         $now           = new DateTimeImmutable();
         $configuration = $this->buildConfiguration();
 
-        $issuer     = $this->config->issuer ?? throw JWTConfigurationException::missingClaim('issuer');
-        $audience   = $this->config->audience ?? throw JWTConfigurationException::missingClaim('audience');
-        $identifier = $this->config->identifier ?? throw JWTConfigurationException::missingClaim('identifier');
+        $issuer     = $this->requireClaim($this->config->issuer, 'issuer');
+        $audience   = $this->requireClaim($this->config->audience, 'audience');
+        $identifier = $this->requireClaim($this->config->identifier, 'identifier');
 
         $builder          = $configuration->builder();
         $serializedAsJson = false;
@@ -134,17 +157,18 @@ final class JWT
             $builder = $builder->withHeader('cty', 'json');
         }
 
-        $notBefore = $now->modify($this->config->canOnlyBeUsedAfter);
-        if ($notBefore === false || $notBefore > $now) {
+        $notBefore = $this->applyModifier($now, $this->config->canOnlyBeUsedAfter, 'canOnlyBeUsedAfter');
+        if ($notBefore > $now) {
+            // Documented behaviour: clamp a future "not before" back to issuance time
+            // so freshly-minted tokens are immediately usable.
             $notBefore = $now;
         }
 
-        $expiresAt = $now->modify($this->config->expiresAt);
-        if ($expiresAt === false) {
-            throw new InvalidArgumentException(
-                "Config::\$expiresAt is not a valid DateTimeImmutable modifier: {$this->config->expiresAt}",
-            );
-        }
+        $expiresAt = $this->applyModifier(
+            $now,
+            $this->expiresAtOverride ?? $this->config->expiresAt,
+            'expiresAt',
+        );
 
         $token = $builder
             ->issuedBy($issuer)
@@ -180,6 +204,8 @@ final class JWT
 
         if ($this->config->validate) {
             $configuration->validator()->assert($parsed, ...$this->buildValidationConstraints());
+        } else {
+            $this->logValidationDisabledWarning();
         }
 
         return $parsed;
@@ -299,10 +325,13 @@ final class JWT
             throw JWTConfigurationException::missingSigner();
         }
 
-        $signerClass = $this->config->algorithm;
+        $signer = $this->buildSigner();
+        if (! $signer instanceof Hmac) {
+            throw JWTConfigurationException::algorithmMismatch('symmetric', $this->config->algorithm);
+        }
 
         return Configuration::forSymmetricSigner(
-            new $signerClass(),
+            $signer,
             InMemory::base64Encoded($this->config->signer),
         );
     }
@@ -316,13 +345,23 @@ final class JWT
             throw JWTConfigurationException::missingClaim('verifyingKey');
         }
 
-        $signerClass = $this->config->algorithm;
+        $signer = $this->buildSigner();
+        if (! $signer instanceof OpenSSL) {
+            throw JWTConfigurationException::algorithmMismatch('asymmetric', $this->config->algorithm);
+        }
 
         return Configuration::forAsymmetricSigner(
-            new $signerClass(),
+            $signer,
             $this->loadKey($this->config->signingKey, $this->config->passphrase ?? ''),
             $this->loadKey($this->config->verifyingKey, ''),
         );
+    }
+
+    private function buildSigner(): Signer
+    {
+        $signerClass = $this->config->algorithm;
+
+        return new $signerClass();
     }
 
     private function loadKey(string $reference, string $passphrase): Key
@@ -343,19 +382,23 @@ final class JWT
      */
     private function buildValidationConstraints(): array
     {
+        if (! in_array('SignedWith', $this->config->validateClaims, true)) {
+            throw JWTConfigurationException::missingSignatureConstraint();
+        }
+
         $constraints = [];
 
         foreach ($this->config->validateClaims as $name) {
             $constraints[] = match ($name) {
                 'SignedWith' => $this->buildSignedWithConstraint(),
                 'IssuedBy'   => new IssuedBy(
-                    $this->config->issuer ?? throw JWTConfigurationException::missingClaim('issuer'),
+                    $this->requireClaim($this->config->issuer, 'issuer'),
                 ),
                 'IdentifiedBy' => new IdentifiedBy(
-                    $this->config->identifier ?? throw JWTConfigurationException::missingClaim('identifier'),
+                    $this->requireClaim($this->config->identifier, 'identifier'),
                 ),
                 'PermittedFor' => new PermittedFor(
-                    $this->config->audience ?? throw JWTConfigurationException::missingClaim('audience'),
+                    $this->requireClaim($this->config->audience, 'audience'),
                 ),
                 'StrictValidAt' => new StrictValidAt(
                     SystemClock::fromUTC(),
@@ -379,6 +422,48 @@ final class JWT
         return new SignedWith($configuration->signer(), $configuration->verificationKey());
     }
 
+    /**
+     * Resolve a required string claim, rejecting both `null` and `''`.
+     *
+     * @return non-empty-string
+     */
+    private function requireClaim(?string $value, string $name): string
+    {
+        if ($value === null || $value === '') {
+            throw JWTConfigurationException::missingClaim($name);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Apply a `DateTimeImmutable::modify()` modifier, normalising the cross-version
+     * failure modes (PHP < 8.3 returns `false`, PHP >= 8.3 throws) into a single,
+     * descriptive exception. Both `canOnlyBeUsedAfter` and `expiresAt` go through here
+     * so an invalid modifier fails loudly and consistently.
+     */
+    private function applyModifier(DateTimeImmutable $base, string $modifier, string $name): DateTimeImmutable
+    {
+        try {
+            $result = $base->modify($modifier);
+        } catch (Throwable $e) {
+            throw new InvalidArgumentException(
+                "Config::\${$name} is not a valid DateTimeImmutable modifier: \"{$modifier}\".",
+                0,
+                $e,
+            );
+        }
+
+        // PHP < 8.3 returns false instead of throwing on an invalid modifier.
+        if ($result === false) {
+            throw new InvalidArgumentException(
+                "Config::\${$name} is not a valid DateTimeImmutable modifier: \"{$modifier}\".",
+            );
+        }
+
+        return $result;
+    }
+
     private function buildLeewayInterval(): ?DateInterval
     {
         if ($this->leewaySeconds === null || $this->leewaySeconds <= 0) {
@@ -398,6 +483,19 @@ final class JWT
             'warning',
             'Daycry\\JWT\\JWT::extractClaimsUnsafe() was called without setting '
             . 'Config\\JWT::$allowUnsafeExtraction = true. The token has not been validated.',
+        );
+    }
+
+    private function logValidationDisabledWarning(): void
+    {
+        if (! function_exists('log_message')) {
+            return;
+        }
+
+        log_message(
+            'warning',
+            'Daycry\\JWT\\JWT::decode() ran with Config\\JWT::$validate = false. '
+            . 'The token signature and registered claims were NOT verified.',
         );
     }
 }

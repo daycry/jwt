@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Daycry\JWT\Commands;
 
 use CodeIgniter\CLI\BaseCommand;
