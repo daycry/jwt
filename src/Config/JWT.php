@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Daycry\JWT\Config;
 
 use CodeIgniter\Config\BaseConfig;
+use Lcobucci\JWT\Signer;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 
 class JWT extends BaseConfig
@@ -38,6 +39,8 @@ class JWT extends BaseConfig
      *   \Lcobucci\JWT\Signer\Ecdsa\Sha256::class (ES256)
      *   \Lcobucci\JWT\Signer\Ecdsa\Sha384::class (ES384)
      *   \Lcobucci\JWT\Signer\Ecdsa\Sha512::class (ES512)
+     *
+     * @var class-string<Signer>
      */
     public string $algorithm = Sha256::class;
 

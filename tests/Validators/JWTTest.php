@@ -172,6 +172,37 @@ final class JWTTest extends CIUnitTestCase
         $this->library->withLeeway(-1);
     }
 
+    public function testWithLeewayAcceptsNullToResetLeeway(): void
+    {
+        $relaxed = $this->library->withLeeway(60);
+        $reset   = $relaxed->withLeeway(null);
+
+        $this->assertNotSame($relaxed, $reset);
+
+        $token = $reset->encode('hello');
+        $this->assertSame('hello', $reset->decode($token)->claims()->get('data'));
+    }
+
+    public function testWithExpiresAtOverridesConfiguredLifetime(): void
+    {
+        $short = $this->library->withExpiresAt('+30 second');
+
+        $this->assertNotSame($this->library, $short);
+
+        $token = $short->encode('hello');
+        $ttl   = $short->getTimeToExpiry($token);
+
+        $this->assertNotNull($ttl);
+        $this->assertGreaterThan(0, $ttl);
+        $this->assertLessThanOrEqual(30, $ttl);
+    }
+
+    public function testWithExpiresAtRejectsEmptyModifier(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->library->withExpiresAt('');
+    }
+
     public function testWithParamDataRejectsEmptyName(): void
     {
         $this->expectException(InvalidArgumentException::class);
