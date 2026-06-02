@@ -33,6 +33,11 @@ parameters:
         - identifier: identical.alwaysFalse
           path: src/JWT.php
           reportUnmatched: false
+        # The flip side of the above: on PHP 8.2 modify() returns false (never throws), so the
+        # defensive catch(Throwable) around it looks dead there; it is live on PHP 8.3+.
+        - identifier: catch.neverThrown
+          path: src/JWT.php
+          reportUnmatched: false
 
 includes:
     - phpstan-baseline.neon
