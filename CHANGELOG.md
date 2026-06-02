@@ -4,7 +4,7 @@ All notable changes to `daycry/jwt` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.1.0]
 
 ### Added
 - New `JWT::withExpiresAt(string $modifier)` method — a per-instance override of the `expiresAt` modifier (e.g. `JWT::for()->withExpiresAt('+5 minutes')->encode($data)` for short-lived access tokens) **without** mutating the shared config. Returns a new instance, mirroring `withLeeway()` / `withSplitData()` / `withParamData()`. Throws `InvalidArgumentException` on an empty string.
