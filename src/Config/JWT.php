@@ -11,9 +11,10 @@ use Lcobucci\JWT\Signer\Hmac\Sha256;
 class JWT extends BaseConfig
 {
     /**
-     * Default `uid` claim. May be overridden per-call via `JWT::encode($data, $uid)`.
+     * Default `uid` claim — a string or integer ID. May be overridden per-call via
+     * `JWT::encode($data, $uid)`.
      */
-    public ?string $uid = null;
+    public int|string|null $uid = null;
 
     /**
      * Algorithm family. Drives how `signer`/`signingKey`/`verifyingKey` are interpreted.

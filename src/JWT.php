@@ -117,7 +117,7 @@ final class JWT
         return $this->split;
     }
 
-    public function encode(mixed $data, mixed $uid = null): string
+    public function encode(mixed $data, int|string|null $uid = null): string
     {
         $now           = new DateTimeImmutable();
         $configuration = $this->buildConfiguration();

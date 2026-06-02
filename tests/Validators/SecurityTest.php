@@ -216,6 +216,17 @@ final class SecurityTest extends CIUnitTestCase
         $this->assertSame(0, $decoded->claims()->get('uid'));
     }
 
+    public function testIntegerUidFromConfigIsPreserved(): void
+    {
+        $this->config->uid = 99;
+        $jwt               = new JWT($this->config);
+
+        $token   = $jwt->encode('payload');
+        $decoded = $jwt->decode($token);
+
+        $this->assertSame(99, $decoded->claims()->get('uid'));
+    }
+
     public function testInvalidAlgorithmTypeIsRejected(): void
     {
         $this->config->algorithmType = 'magic';
