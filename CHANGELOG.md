@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- New `JWT::withExpiresAt(string $modifier)` method — a per-instance override of the `expiresAt` modifier (e.g. `JWT::for()->withExpiresAt('+5 minutes')->encode($data)` for short-lived access tokens) **without** mutating the shared config. Returns a new instance, mirroring `withLeeway()` / `withSplitData()` / `withParamData()`. Throws `InvalidArgumentException` on an empty string.
+- `JWTConfigurationException::missingSignatureConstraint()` and `JWTConfigurationException::algorithmMismatch()` factories backing the new fail-fast checks below.
+
+### Changed
+- `JWT::withLeeway(?int $seconds)` now accepts `null` to reset to "no leeway"; a negative int still throws `InvalidArgumentException`.
+- `Config\JWT::$uid` is now `int|string|null` (was `?string`) and `JWT::encode(mixed $data, int|string|null $uid = null)` accepts an integer or string uid. An integer uid (e.g. a DB primary key) round-trips as an integer because `lcobucci/jwt` preserves the JSON type.
+- Empty-string `issuer` / `audience` / `identifier` now throw `JWTConfigurationException`, the same as `null` (previously only `null` was rejected).
+- Every file under `src/` now declares `declare(strict_types=1)`.
+
+### Fixed
+- `decode()` now refuses to silently skip signature verification: if `Config\JWT::$validateClaims` does **not** contain `'SignedWith'` while `$validate = true`, it throws `JWTConfigurationException`. To decode without any validation, set `Config\JWT::$validate = false`.
+- `decode()` with `$validate = false` now logs a `warning` via `log_message()` (parallel to `extractClaimsUnsafe()`); it is intended for tests / debug only.
+- A mismatch between `$algorithmType` and the `$algorithm` signer class — e.g. `algorithmType = 'asymmetric'` left on the default HMAC `Sha256`, or `algorithmType = 'symmetric'` with an RSA/ECDSA signer — now throws `JWTConfigurationException` with a clear message instead of a cryptic `lcobucci` "key" error. Symmetric requires an `Lcobucci\JWT\Signer\Hmac\*` signer; asymmetric requires `Rsa\*` or `Ecdsa\*`.
+- Invalid `canOnlyBeUsedAfter` **and** `expiresAt` `DateTimeImmutable::modify()` strings now both throw `InvalidArgumentException` consistently, normalising the PHP 8.2 (returns `false`) and 8.3+ (throws) failure modes. A *valid* future `canOnlyBeUsedAfter` is still clamped to issuance time so freshly-issued tokens are immediately usable (intended).
+- `jwt:keypair`: on Windows the command now warns that `chmod()` cannot enforce file permissions (recommends restricting access via NTFS ACLs, e.g. `icacls`), and warns when `--passphrase` is passed on the command line because that value can leak via the process list and shell history.
+
 ## [3.0.0] — TBD
 
 The 3.0 release rebuilds the library on top of `lcobucci/jwt 5`, hardens defaults, fixes several latent bugs, and introduces asymmetric (RSA / ECDSA) support. See [Migration v2 → v3](docs/migration-v2-to-v3.md) for the upgrade path.

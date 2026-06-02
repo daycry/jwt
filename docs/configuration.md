@@ -24,7 +24,7 @@ The library refuses to operate when required fields are missing — it throws `D
 | `$audience` | always | `null` |
 | `$identifier` | always | `null` |
 
-The first call to `encode()` / `decode()` with any of these unset throws `JWTConfigurationException::missingClaim('...')` with a message that names the missing field.
+The first call to `encode()` / `decode()` with any of these unset throws `JWTConfigurationException::missingClaim('...')` with a message that names the missing field. An **empty string** is treated exactly like `null` for `$issuer`, `$audience` and `$identifier` — both throw.
 
 ---
 
@@ -36,7 +36,9 @@ The first call to `encode()` / `decode()` with any of these unset throws `JWTCon
 
 ### `$algorithm`
 
-The signer class. Pick one matching `$algorithmType`:
+The signer class. It **must** match `$algorithmType`: `'symmetric'` requires an `Lcobucci\JWT\Signer\Hmac\*` signer, and `'asymmetric'` requires an `Rsa\*` or `Ecdsa\*` signer. A mismatch — for example leaving `$algorithmType = 'asymmetric'` with the default HMAC `Sha256`, or pairing `'symmetric'` with an RSA/ECDSA signer — throws `JWTConfigurationException` with a clear message instead of a cryptic `lcobucci` "key" error.
+
+Pick one matching `$algorithmType`:
 
 | Algorithm | Class |
 |---|---|
@@ -112,7 +114,7 @@ Application-specific identifier. Tokens with a different `jti` are rejected.
 
 ### `$uid`
 
-Default value for the custom `uid` claim. Set per-call via `JWT::encode($data, $uid)`.
+Default value for the custom `uid` claim — a string **or** an integer ID (e.g. a database primary key). Type `int|string|null`. Set per-call via `JWT::encode($data, $uid)`, which accepts `int|string|null`. `lcobucci/jwt` preserves the JSON type, so an integer `uid` round-trips back as an integer.
 
 ### `$canOnlyBeUsedAfter` / `$expiresAt`
 
@@ -131,7 +133,7 @@ If `canOnlyBeUsedAfter` resolves to a moment after `iat`, it is clamped to `iat`
 ### `$validate`
 
 `true` (default): `decode()` runs every constraint in `$validateClaims`.
-`false`: parsing only — **never use in production**.
+`false`: parsing only — **never use in production**. When `decode()` runs with `$validate = false` it writes a `warning` via `log_message()` (parallel to `extractClaimsUnsafe()`); the signature and registered claims are **not** verified. This is intended for tests / debug only.
 
 ### `$validateClaims`
 
@@ -147,7 +149,9 @@ Allowed values:
 | `PermittedFor` | `PermittedFor` | `aud` |
 | `LooseValidAt` (default) | `LooseValidAt` | `iat`/`nbf`/`exp` with leeway, missing claims tolerated |
 | `StrictValidAt` | `StrictValidAt` | `iat`/`nbf`/`exp` all required |
-| `ValidAt` | alias of `LooseValidAt` | Provided for v2.x compatibility |
+| `ValidAt` | alias of `LooseValidAt` | Legacy name; prefer `LooseValidAt` |
+
+> **`SignedWith` is mandatory when `$validate = true`.** If `$validateClaims` does not contain `'SignedWith'`, `decode()` throws `JWTConfigurationException` rather than silently skip signature verification. To decode a token without any validation, set `$validate = false` instead of dropping `SignedWith`.
 
 ### `$leeway`
 
@@ -157,7 +161,7 @@ Acceptable clock skew in seconds for `LooseValidAt` / `StrictValidAt`. `0` (defa
 public ?int $leeway = 30;   // accept ±30 s of skew
 ```
 
-Leeway can also be applied per-call: `$jwt->withLeeway(60)`.
+Leeway can also be applied per-call: `$jwt->withLeeway(60)`. Passing `null` (`$jwt->withLeeway(null)`) resets it to no leeway; a negative value throws `InvalidArgumentException`.
 
 ---
 
@@ -206,9 +210,14 @@ jwt.allowUnsafeExtraction = false
 ```php
 use Daycry\JWT\JWT;
 
-$config            = config('JWT');
-$config->expiresAt = '+5 minutes';
-$config->uid       = (string) $userId;
+$config      = config('JWT');
+$config->uid = $userId; // string or integer ID
 
 $token = (new JWT($config))->encode($payload);
+```
+
+To override the lifetime for a single token **without** mutating the shared config, prefer the immutable per-instance helper:
+
+```php
+$token = JWT::for()->withExpiresAt('+5 minutes')->encode($payload, $userId);
 ```

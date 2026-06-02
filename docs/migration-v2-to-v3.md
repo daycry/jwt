@@ -5,10 +5,11 @@
 v3.0 is a breaking release that:
 
 - Migrates the underlying library from `lcobucci/jwt ^4` to `lcobucci/jwt ^5`.
-- Replaces all mutable fluent setters with an **immutable** `with*()` API.
+- Replaces all mutable fluent setters with an **immutable** `with*()` API (`withSplitData()`, `withParamData()`, `withLeeway()`, `withExpiresAt()`).
 - Removes the ambiguous `decode()` return type (`DataSet|RequiredConstraintsViolated`); `decode()` now always throws and `tryDecode()` is the non-throwing variant.
 - Adds first-class **RSA / ECDSA** support alongside the previous HMAC modes.
 - Hardens the default config: `signer`, `issuer`, `audience` and `identifier` are `null` by default and the library refuses to operate until they are set.
+- **Fails closed** on misconfiguration: an algorithm/signer mismatch, a missing `SignedWith` constraint while validation is on, and an invalid date modifier all throw a clear exception instead of failing silently or with a cryptic error.
 
 The minimum PHP version is now **8.2**.
 
@@ -22,12 +23,16 @@ The minimum PHP version is now **8.2**.
 | `JWT::decode()` return | `DataSet \| RequiredConstraintsViolated` | `Plain` (always) |
 | Fail mode | `Config::$throwable` flag | `decode()` throws, `tryDecode()` returns `?Plain` |
 | Config::$throwable | exists | **removed** |
-| Mutable setters | `setSplitData()`, `setParamData()` | `withSplitData()`, `withParamData()` |
+| Mutable setters | `setSplitData()`, `setParamData()` | `withSplitData()`, `withParamData()`, `withLeeway()`, `withExpiresAt()` |
+| `withLeeway()` argument | n/a | `?int` — `null` resets to "no leeway"; a negative int throws |
 | Cache method | `clearCache()` | **removed** (no cache) |
+| `encode()` uid type | `mixed $uid` | `int\|string\|null $uid` (an integer ID round-trips as an integer) |
 | Default `signer` | `'mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw='` | `null` (must be configured) |
-| Default `issuer/audience/identifier` | non-null example values | `null` (must be configured) |
+| Default `issuer/audience/identifier` | non-null example values | `null` (empty string now rejected too) |
 | Algorithm support | HMAC only | HMAC, RSA, ECDSA |
-| `ValidAt` constraint | deprecated `ValidAt` | `LooseValidAt` (default) / `StrictValidAt` (with leeway) |
+| Type/signer mismatch | cryptic lcobucci "key" error | `JWTConfigurationException` |
+| Missing `SignedWith` (with `$validate=true`) | silently skipped | `JWTConfigurationException` |
+| `ValidAt` constraint | deprecated `ValidAt` | `LooseValidAt` (default, `ValidAt` still aliased) / `StrictValidAt` |
 
 ---
 
@@ -83,10 +88,13 @@ $jwt->setParamData('payload');
 $jwt = (new JWT($config))
     ->withSplitData()
     ->withParamData('payload')
-    ->withLeeway(30); // new in v3 — optional clock skew tolerance
+    ->withLeeway(30)               // new in v3 — optional clock skew tolerance
+    ->withExpiresAt('+5 minutes'); // new in v3 — per-instance expiry override
 ```
 
 If you held a reference to a configured `$jwt` in v2.x, your code worked because the setters mutated `$jwt`. In v3.0 the original instance is unchanged — assign the result of `with*()` to a new variable or chain.
+
+`withLeeway(?int $seconds)` accepts `null` to reset to "no leeway"; a negative int throws `InvalidArgumentException`. `withExpiresAt(string $modifier)` overrides the configured `expiresAt` for this instance only (handy for short-lived access tokens) and throws `InvalidArgumentException` on an empty string. Both follow the immutable pattern and return a new instance.
 
 ### Compact-mode payloads
 
@@ -116,28 +124,46 @@ public bool   $throwable  = true;
 
 **v3.0 defaults (fail-loud)**
 ```php
-public string  $algorithmType = 'symmetric';      // or 'asymmetric'
+public int|string|null $uid = null;                // string OR integer ID; round-trips with its JSON type
+public string  $algorithmType = 'symmetric';       // or 'asymmetric'
+public string  $algorithm     = \Lcobucci\JWT\Signer\Hmac\Sha256::class; // must match $algorithmType
 public ?string $signer        = null;              // run `php spark jwt:key`
 public ?string $signingKey    = null;              // run `php spark jwt:keypair`
 public ?string $verifyingKey  = null;
 public ?string $passphrase    = null;
-public ?string $issuer        = null;              // required, no default
+public ?string $issuer        = null;              // required, no default (empty string also rejected)
 public ?string $audience      = null;
 public ?string $identifier    = null;
-public ?int    $leeway        = 0;                 // new — clock skew in seconds
+public string  $canOnlyBeUsedAfter = '+0 minute';  // DateTimeImmutable::modify() modifier
+public string  $expiresAt          = '+24 hour';   // DateTimeImmutable::modify() modifier
+public ?int    $leeway        = 0;                 // new — clock skew in seconds; null = no leeway
+public bool    $validate      = true;              // new — set false to decode without any validation
 public bool    $allowUnsafeExtraction = false;     // new — silences extractClaimsUnsafe warning
 public array   $validateClaims = [
     'SignedWith', 'IssuedBy', 'LooseValidAt', 'IdentifiedBy', 'PermittedFor',
 ];
+// Allowed $validateClaims values: SignedWith, IssuedBy, IdentifiedBy, PermittedFor,
+// LooseValidAt (alias: ValidAt), StrictValidAt.
 ```
 
 After upgrading, every install must set these explicitly via `app/Config/JWT.php` or `.env`. The library throws `JWTConfigurationException` on the first encode/decode if any required field is missing.
+
+`$algorithm` must match `$algorithmType`: a `symmetric` type requires an `Lcobucci\JWT\Signer\Hmac\*` signer, and an `asymmetric` type requires an `Rsa\*` or `Ecdsa\*` signer. A mismatch — e.g. switching `$algorithmType` to `'asymmetric'` but leaving the default HMAC `Sha256` signer — throws `JWTConfigurationException` with a clear message instead of a cryptic lcobucci "key" error.
 
 ### Removed APIs
 
 - `Config\JWT::$throwable` — gone. Use `decode()` (throws) vs. `tryDecode()` (returns null).
 - `JWT::clearCache()` — gone. The library no longer caches state across calls; the v2.x bug where a cached `FrozenClock` validated expired tokens as fresh is impossible to reintroduce.
 - `JWT::setSplitData()`, `JWT::setParamData()` — replaced by `withSplitData()`, `withParamData()`.
+
+### New fail-closed guards
+
+v3.0 refuses to silently weaken security. Watch for these new exceptions while migrating:
+
+- **Signature verification is mandatory by default.** If `$validate = true` (the default) but `$validateClaims` does **not** contain `'SignedWith'`, `decode()` throws `JWTConfigurationException` rather than skip signature verification. To decode without any validation, set `Config\JWT::$validate = false` explicitly.
+- **`$validate = false` logs a warning.** When validation is disabled, `decode()` emits a `'warning'` via `log_message()` (parallel to `extractClaimsUnsafe()`). It is intended for tests / debugging only — never for production traffic.
+- **Algorithm/type mismatch throws.** See the note above: a signer that does not match `$algorithmType` now throws `JWTConfigurationException` instead of a cryptic lcobucci error.
+- **Invalid date modifiers throw consistently.** An invalid `canOnlyBeUsedAfter` or `expiresAt` modifier now throws `InvalidArgumentException` on every supported PHP version (8.2 returned `false`, 8.3+ throws). A *valid* future `canOnlyBeUsedAfter` is still clamped to issuance time so freshly-issued tokens are immediately usable (unchanged, intended behaviour).
 
 ---
 
@@ -171,8 +197,10 @@ public ?string $passphrase    = null; // set if you encrypted the private key
 1. `composer require daycry/jwt:^3` (will pull `lcobucci/jwt:^5` automatically).
 2. Update `app/Config/JWT.php`:
    - Set `signer` (HMAC) or `signingKey`/`verifyingKey` (asymmetric).
-   - Set `issuer`, `audience`, `identifier` to your real values — the example URLs from v2.x are gone.
+   - Set `issuer`, `audience`, `identifier` to your real values — the example URLs from v2.x are gone (empty strings are now rejected, same as `null`).
+   - Make sure `$algorithm` matches `$algorithmType` (HMAC signer for `'symmetric'`, RSA/ECDSA signer for `'asymmetric'`) — a mismatch now throws.
    - Replace `'ValidAt'` with `'LooseValidAt'` (or `'StrictValidAt'`) in `$validateClaims` if you customized it.
+   - Keep `'SignedWith'` in `$validateClaims` while `$validate = true` — removing it now throws instead of silently skipping signature verification.
    - Remove `$throwable` if you had set it.
 3. Search your codebase:
    - `setSplitData(` → `withSplitData(` (and re-assign the returned instance).

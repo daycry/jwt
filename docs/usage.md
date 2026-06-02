@@ -21,7 +21,7 @@ $config->issuer = 'https://api.my-app.com';
 $jwt = new JWT($config);
 ```
 
-`JWT` is **immutable**: `withSplitData()`, `withParamData()`, `withLeeway()` all return new instances.
+`JWT` is **immutable**: `withSplitData()`, `withParamData()`, `withLeeway()`, `withExpiresAt()` all return new instances.
 
 ```php
 $base    = JWT::for();
@@ -35,13 +35,15 @@ $splitter->isSplitData();                // true
 ## encode()
 
 ```php
-public function encode(mixed $data, mixed $uid = null): string
+public function encode(mixed $data, int|string|null $uid = null): string
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
 | `$data` | `mixed` | Payload. Scalar, array, or object. |
-| `$uid` | `mixed` | Override for the `uid` claim. Defaults to `Config\JWT::$uid`. Pass `0` if you actually want zero — only `null` and `''` skip the claim. |
+| `$uid` | `int\|string\|null` | Override for the `uid` claim. Defaults to `Config\JWT::$uid`. Accepts a string **or** an integer ID (e.g. a DB primary key) — `lcobucci` preserves the JSON type, so an integer `uid` round-trips as an integer. Pass `0` if you actually want zero — only `null` and `''` skip the claim. |
+
+> The standard claims (`iss`, `aud`, `jti`) come from `Config\JWT::$issuer`, `$audience` and `$identifier`. Each one is required: a `null` **or empty-string** value throws `Daycry\JWT\Exceptions\JWTConfigurationException` (run `php spark jwt:publish` and fill them in).
 
 ### Standard claims added automatically
 
@@ -94,6 +96,9 @@ Parses and validates the token. **Always throws** on failure:
 
 - `Daycry\JWT\Exceptions\InvalidTokenException` — malformed input.
 - `Lcobucci\JWT\Validation\RequiredConstraintsViolated` — at least one constraint failed.
+- `Daycry\JWT\Exceptions\JWTConfigurationException` — `Config\JWT::$validateClaims` does not contain `SignedWith` while `$validate = true`. The library refuses to silently skip signature verification. To decode without any validation, set `Config\JWT::$validate = false`.
+
+When `Config\JWT::$validate = false`, `decode()` skips validation **and logs a `warning`** via `log_message()` (parallel to `extractClaimsUnsafe()`) — it is intended for tests/debug only, never production.
 
 ```php
 use Daycry\JWT\Exceptions\InvalidTokenException;
@@ -163,7 +168,7 @@ Throws the same exceptions as `decode()`.
 
 ---
 
-## withSplitData() / withParamData() / withLeeway()
+## withSplitData() / withParamData() / withLeeway() / withExpiresAt()
 
 Immutable configuration:
 
@@ -171,13 +176,32 @@ Immutable configuration:
 $jwt = JWT::for()
     ->withSplitData()                  // each array key becomes its own claim
     ->withParamData('payload')         // change the default 'data' claim name
-    ->withLeeway(30);                  // ±30 seconds of clock skew tolerance
+    ->withLeeway(30)                   // ±30 seconds of clock skew tolerance
+    ->withExpiresAt('+5 minutes');     // override the configured expiresAt modifier
 
 echo $jwt->getParamData();             // 'payload'
 $jwt->isSplitData();                   // true
 ```
 
 Each call returns a fresh instance — the original is untouched.
+
+### withLeeway(?int $seconds)
+
+Accepts an integer number of seconds, or `null` to reset back to "no leeway". A **negative** int throws `InvalidArgumentException`.
+
+```php
+$jwt->withLeeway(30);                  // ±30 seconds
+$jwt->withLeeway(null);                // no leeway
+```
+
+### withExpiresAt(string $modifier)
+
+Per-instance override of the `expiresAt` modifier — mint short-lived access tokens **without** mutating the shared `Config\JWT::$expiresAt`. The modifier is any string accepted by `DateTimeImmutable::modify()` (an invalid modifier throws `InvalidArgumentException` at encode time). An empty string throws `InvalidArgumentException` immediately.
+
+```php
+$access = JWT::for()->withExpiresAt('+5 minutes')->encode($data);   // short-lived
+$refresh = JWT::for()->encode($data);                                // uses Config::$expiresAt
+```
 
 ---
 

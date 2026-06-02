@@ -96,7 +96,11 @@ Parsing failures (token is not three base64-encoded segments, encryption headers
 
 ### `JWTConfigurationException`
 
-Encoding without a configured `signer` / `signingKey` / `issuer` / `audience` / `identifier` produces `Daycry\JWT\Exceptions\JWTConfigurationException` with a message naming the missing field.
+Encoding without a configured `signer` / `signingKey` / `issuer` / `audience` / `identifier` produces `Daycry\JWT\Exceptions\JWTConfigurationException` with a message naming the missing field. An **empty string** counts as missing, just like `null`. The same exception is also thrown when:
+
+- `$validateClaims` does not contain `'SignedWith'` while `$validate = true` (decoding refuses to silently skip signature verification — set `$validate = false` to decode without any validation);
+- `$algorithm` does not match `$algorithmType` (`'symmetric'` needs an `Lcobucci\JWT\Signer\Hmac\*` signer; `'asymmetric'` needs an `Rsa\*` or `Ecdsa\*` signer);
+- `$validateClaims` contains an unknown name (allowed: `SignedWith`, `IssuedBy`, `IdentifiedBy`, `PermittedFor`, `LooseValidAt` (alias `ValidAt`), `StrictValidAt`).
 
 ### `\JsonException`
 
@@ -180,27 +184,38 @@ $routes->group('api', ['filter' => 'jwtAuth'], function ($routes) {
 
 ## Multi-tenant / per-request configuration
 
-`JWT` is immutable: the `with*()` methods return new instances. Combine with per-call config tweaks for context-specific tokens.
+`JWT` is immutable: the `with*()` methods (`withExpiresAt()`, `withLeeway()`, `withSplitData()`, `withParamData()`) each return a **new** instance, leaving the original — and the shared `config('JWT')` singleton — untouched. Prefer them over mutating config so concurrent requests can't trample each other's settings.
+
+The `uid` passed to `encode()` may be a string **or** an integer (e.g. a DB primary key); `lcobucci/jwt` preserves the JSON type, so an integer `uid` round-trips back as an integer.
 
 ```php
-function issueAccessToken(array $payload, string $uid): string
-{
-    $config            = config('JWT');
-    $config->uid       = $uid;
-    $config->expiresAt = '+15 minutes';
+use Daycry\JWT\JWT;
 
-    return (new JWT($config))->encode($payload);
+function issueAccessToken(array $payload, int|string $uid): string
+{
+    // Short-lived expiry overridden for this call only — config stays at its default.
+    return JWT::for()
+        ->withExpiresAt('+15 minutes')
+        ->encode($payload, $uid);
 }
 
-function issueRefreshToken(string $uid): string
+function issueRefreshToken(int|string $uid): string
 {
-    $config                  = config('JWT');
-    $config->uid             = $uid;
-    $config->expiresAt       = '+30 days';
-    $config->validateClaims  = ['SignedWith', 'LooseValidAt']; // narrow validation later
-
-    return (new JWT($config))->encode(['type' => 'refresh']);
+    return JWT::for()
+        ->withExpiresAt('+30 days')
+        ->encode(['type' => 'refresh'], $uid);
 }
+```
+
+`withExpiresAt(string $modifier)` overrides the configured `expiresAt` for that instance only and accepts any `DateTimeImmutable::modify()` string. An empty string throws `InvalidArgumentException`, and an invalid modifier throws `InvalidArgumentException` when the token is encoded (consistently across PHP 8.2, which returns `false`, and 8.3+, which throws).
+
+If you genuinely need a different *validation* profile per token type, pass a cloned config to the constructor — `$validateClaims` must always include `'SignedWith'` or `decode()` throws `JWTConfigurationException` (it refuses to silently skip signature verification):
+
+```php
+$config                 = clone config('JWT');
+$config->validateClaims = ['SignedWith', 'LooseValidAt']; // keep SignedWith — required
+
+$jwt = new JWT($config);
 ```
 
 ---
@@ -211,9 +226,14 @@ function issueRefreshToken(string $uid): string
 
 ```php
 $config->leeway = 30;            // seconds; applies to iat / nbf / exp
-// or per-call:
+// or per-call (returns a new instance, config untouched):
 $jwt = JWT::for()->withLeeway(60);
+
+// Reset to "no leeway" for a single instance:
+$strict = JWT::for()->withLeeway(null);
 ```
+
+`withLeeway(?int $seconds)` accepts a non-negative int or `null` (no leeway). A negative int throws `InvalidArgumentException`.
 
 `StrictValidAt` requires `iat`, `nbf` and `exp` to be present **and** within the leeway window. `LooseValidAt` skips checks for any of the three that is missing.
 
@@ -224,7 +244,7 @@ $jwt = JWT::for()->withLeeway(60);
 | Operation | Cost |
 |---|---|
 | `new JWT($config)` / `JWT::for()` | Negligible |
-| First `encode()` / `decode()` | Builds the `Configuration` (signer + key load); `LocalFileReference` reads PEMs once per call |
+| First `encode()` / `decode()` | Builds the `Configuration` (signer + key load); `InMemory::file()` reads PEMs once per call |
 | `tryDecode()` | Same as `decode()` plus a try/catch wrapper |
 | `getPayload()` | `decode()` + a single `json_decode` |
 | `isExpired()` / `getTimeToExpiry()` | Parse only — no validation |
