@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Daycry\JWT\Commands;
 
 use CodeIgniter\CLI\BaseCommand;
@@ -67,7 +69,7 @@ class JWTPublish extends BaseCommand
             throw new RuntimeException("Unable to read source config at {$path}");
         }
 
-        $contents = str_replace('namespace Daycry\JWT\Config', 'namespace Config', $contents);
+        $contents = str_replace('namespace Daycry\JWT\Config;', 'namespace Config;', $contents);
         $contents = str_replace('extends BaseConfig', 'extends \Daycry\JWT\Config\JWT', $contents);
 
         return $this->writeFile('Config/JWT.php', $contents);
@@ -107,8 +109,7 @@ class JWTPublish extends BaseCommand
             throw new RuntimeException("Failed to write file: {$appPath}{$path}");
         }
 
-        $relative = str_replace($appPath, '', $path);
-        CLI::write(CLI::color('Created: ', 'yellow') . $relative);
+        CLI::write(CLI::color('Created: ', 'yellow') . $path);
 
         return true;
     }

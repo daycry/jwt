@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Daycry\JWT\Commands;
 
 use CodeIgniter\CLI\BaseCommand;
@@ -37,6 +39,14 @@ class JWTKeyPair extends BaseCommand
             $passphrase = CLI::getOption('passphrase');
             $force      = (bool) CLI::getOption('force');
 
+            if (is_string($passphrase) && $passphrase !== '') {
+                CLI::write(
+                    '⚠️  Passing --passphrase on the command line can expose it via the process '
+                    . 'list and shell history. Prefer a secrets manager or interactive entry.',
+                    'yellow',
+                );
+            }
+
             if (! is_dir($output) && ! mkdir($output, 0700, true) && ! is_dir($output)) {
                 throw new RuntimeException("Cannot create output directory: {$output}");
             }
@@ -65,10 +75,8 @@ class JWTKeyPair extends BaseCommand
 
             $publicPem = $details['key'];
 
-            file_put_contents($privatePath, $privatePem);
-            chmod($privatePath, 0600);
-            file_put_contents($publicPath, $publicPem);
-            chmod($publicPath, 0644);
+            $this->writeKeyFile($privatePath, $privatePem, 0600);
+            $this->writeKeyFile($publicPath, $publicPem, 0644);
 
             CLI::write('✅ Key pair generated:', 'green');
             CLI::write('  private: ' . $privatePath, 'cyan');
@@ -100,6 +108,33 @@ class JWTKeyPair extends BaseCommand
 
             return EXIT_ERROR;
         }
+    }
+
+    /**
+     * Persist a key file and lock down its permissions.
+     *
+     * On Windows `chmod()` is a silent no-op, so the operator is warned to restrict
+     * access through NTFS ACLs instead of relying on POSIX mode bits.
+     *
+     * @throws RuntimeException When the file cannot be written.
+     */
+    protected function writeKeyFile(string $path, string $contents, int $mode): void
+    {
+        if (file_put_contents($path, $contents) === false) {
+            throw new RuntimeException("Failed to write key file: {$path}");
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            CLI::write(
+                '⚠️  ' . $path . ' cannot be restricted with chmod() on Windows. '
+                . 'Lock it down with NTFS ACLs (e.g. icacls) so only the service account can read it.',
+                'yellow',
+            );
+
+            return;
+        }
+
+        chmod($path, $mode);
     }
 
     /**
