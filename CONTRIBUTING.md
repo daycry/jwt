@@ -32,6 +32,14 @@ composer cs-check   # report issues without changing files
 composer cs-fix     # auto-fix where possible
 ```
 
+Every file under `src/` must declare `strict_types=1`:
+
+```php
+<?php
+
+declare(strict_types=1);
+```
+
 ## Static Analysis
 
 ```bash

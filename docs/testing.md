@@ -50,15 +50,18 @@ vendor/bin/phpunit --filter "/testJWTEncodeString$/"
 ```
 tests/
 ├── Commands/
-│   ├── JWTGenerateKeyActualTest.php   ← exercises command code via reflection + deps
-│   ├── JWTGenerateKeyDirectTest.php   ← direct logic tests (no CLI)
-│   ├── JWTGenerateKeyLogicTest.php    ← unit tests for key-generation logic
-│   ├── JWTGenerateKeyTest.php         ← reflection and structure tests
-│   └── JWTPublishTest.php             ← JWTPublish command tests
+│   ├── JWTGenerateKeyTest.php           ← jwt:key command (StreamFilter + reflection)
+│   ├── JWTKeyPairTest.php               ← jwt:keypair command (skips without OpenSSL)
+│   ├── JWTKeyPairWriteKeyFileTest.php   ← writeKeyFile() in isolation (runs on Windows)
+│   └── JWTPublishTest.php               ← jwt:publish command tests
+├── Exceptions/
+│   └── JWTConfigurationExceptionTest.php ← exception factory messages
 ├── Performance/
-│   └── JWTPerformanceTest.php         ← timing assertions for lazy loading & caching
+│   └── JWTPerformanceTest.php           ← timing assertions
 └── Validators/
-    └── JWTTest.php                    ← core encode/decode/validation tests
+    ├── AsymmetricTest.php               ← RSA/ECDSA round-trips (skips without OpenSSL)
+    ├── JWTTest.php                      ← core encode/decode/validation tests
+    └── SecurityTest.php                 ← security guards, edge cases, fail-closed config
 ```
 
 ---
@@ -78,11 +81,12 @@ This causes `JWTGenerateKey::updateEnvFile()` to skip interactive prompts and ov
 | Variable | Value | Purpose |
 |---|---|---|
 | `CI_ENVIRONMENT` | `testing` | Activates test-safe behaviour in commands |
-| `JWT_SIGNER` | (base64 string) | Default signing key for test tokens |
-| `JWT_ISSUER` | `https://test.example.com` | Issuer claim in test tokens |
-| `JWT_AUDIENCE` | `https://test.example.com` | Audience claim in test tokens |
-| `JWT_IDENTIFIER` | `jwt-test-app` | Identifier claim in test tokens |
-| `JWT_EXPIRES_AT` | `+1 hour` | Token lifetime during tests |
+| `jwt.signer` | (base64 string) | Default signing key for test tokens |
+| `jwt.issuer` | `https://test.example.com` | Issuer claim in test tokens |
+| `jwt.audience` | `https://test.example.com` | Audience claim in test tokens |
+| `jwt.identifier` | `jwt-test-app` | Identifier claim in test tokens |
+| `jwt.expiresAt` | `+1 hour` | Token lifetime during tests |
+| `CLI_NO_PROMPT` / `AUTO_ANSWER` | `true` / `y` | Auto-answer CLI prompts in tests |
 
 ---
 
@@ -96,15 +100,17 @@ Covers the core `JWT` class public API:
 |---|---|
 | `testJWTEncodeString` | Scalar payload stored in `data` claim |
 | `testJWTEncodeStringWithCustomUid` | `uid` override via second argument |
-| `testJWTEncodeStringWithUid` | `uid` taken from config |
-| `testJWTEncodeStringDefaultConfig` | `new JWT()` without explicit config |
+| `testJWTEncodeStringPicksUpDefaultUid` | `uid` taken from config |
+| `testJWTEncodeStringDefaultConfig` | `JWT::for()` falls back to `config('JWT')` |
 | `testJWTEncodeArrayWithoutSplit` | Integer and associative arrays as JSON in `data` |
 | `testJWTEncodeArrayWithSplit` | Array keys spread as individual claims |
-| `testJWTDecodeErrorThrowable` | `RequiredConstraintsViolated` is thrown on invalid token |
-| `testJWTDecodeErrorNoThrowable` | Exception is returned (not thrown) when `throwable=false` |
-| `testJWTValidationConstraints` | All 5 constraints pass on a freshly encoded token |
+| `testDecodeThrowsOnWrongIdentifier` | `RequiredConstraintsViolated` is thrown on an invalid token |
+| `testTryDecodeReturnsNullOnFailure` | `tryDecode()` returns `null` (does not throw) on failure |
+| `testJWTValidationConstraintsAllPass` | All 5 constraints pass on a freshly encoded token |
 | `testJWTValidationDisabled` | `validate=false` bypasses all constraint checks |
-| `testJWTPartialValidationConstraints` | Subset of constraints (`SignedWith`, `ValidAt`) |
+| `testJWTPartialValidationConstraints` | Subset of constraints (`SignedWith`, `LooseValidAt`) |
+| `testWithLeewayAcceptsNullToResetLeeway` | `withLeeway(null)` resets leeway to "no leeway" |
+| `testWithExpiresAtOverridesConfiguredLifetime` | `withExpiresAt()` overrides the configured token lifetime |
 
 ### `tests/Performance/JWTPerformanceTest.php`
 
@@ -155,9 +161,9 @@ Integration-style coverage that actually calls command code:
 
 ## Writing Tests for This Library
 
-### Disable `ValidAt` for deterministic tests
+### Disable `LooseValidAt` for deterministic tests
 
-The `ValidAt` constraint checks that the current time falls inside `[nbf, exp]`. This can cause flaky tests on slow CI machines. Exclude it from `validateClaims` in your test's `setUp()`:
+The `LooseValidAt` constraint checks that the current time falls inside `[nbf, exp]`. This can cause flaky tests on slow CI machines. Exclude it from `validateClaims` in your test's `setUp()` — but keep `SignedWith`, otherwise `decode()` throws `JWTConfigurationException` (it refuses to skip signature verification):
 
 ```php
 protected function setUp(): void
@@ -170,7 +176,7 @@ protected function setUp(): void
         'IssuedBy',
         'IdentifiedBy',
         'PermittedFor',
-        // 'ValidAt' intentionally omitted
+        // 'LooseValidAt' intentionally omitted
     ];
     $this->library = new JWT($this->config);
 }
@@ -202,8 +208,8 @@ public function testDecodeThrowsOnExpiredToken(): void
 
     $token = $jwt->encode('payload');
 
-    // Re-enable ValidAt so expiry is checked
-    $config->validateClaims = ['SignedWith', 'ValidAt'];
+    // Re-enable LooseValidAt so expiry is checked
+    $config->validateClaims = ['SignedWith', 'LooseValidAt'];
     $strictJwt = new JWT($config);
 
     $this->expectException(\Lcobucci\JWT\Validation\RequiredConstraintsViolated::class);

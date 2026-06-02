@@ -68,9 +68,10 @@ php spark jwt:key         # generate jwt.signer in .env
 ```php
 use Daycry\JWT\JWT;
 
-$jwt = JWT::for();   // pulls config('JWT')
+$jwt = JWT::for();                 // pulls config('JWT')
+// or inject an explicit config: new JWT(config('JWT'));
 
-// Encode
+// Encode — the uid may be a string or an integer ID (e.g. a DB primary key)
 $token = $jwt->encode(['user_id' => 42, 'role' => 'admin'], 'user-42');
 
 // Decode + validate (throws on failure)
@@ -87,7 +88,7 @@ if ($claims === null) {
 }
 ```
 
-> The library throws `JWTConfigurationException` if `jwt.signer`, `jwt.issuer`, `jwt.audience`, or `jwt.identifier` is empty. Defaults are intentionally `null` to fail loudly.
+> The library throws `JWTConfigurationException` if `jwt.signer`, `jwt.issuer`, `jwt.audience`, or `jwt.identifier` is missing — both `null` and an empty string `""` are rejected. Defaults are intentionally `null` to fail loudly.
 
 ---
 
@@ -160,11 +161,22 @@ $jwt = JWT::for()->withParamData('payload');
 $jwt->getPayload($jwt->encode('hello'));  // "hello"
 ```
 
+### Short-lived tokens (`withExpiresAt`)
+
+Override the configured `expiresAt` modifier for a single instance, without mutating the shared config — useful for short-lived access tokens. Like every `with*()` method it returns a new instance. Passing an empty string throws `InvalidArgumentException`.
+
+```php
+$accessToken = JWT::for()->withExpiresAt('+5 minutes')->encode($data);
+```
+
 ### Clock skew tolerance (`LooseValidAt`)
 
 ```php
-$jwt = JWT::for()->withLeeway(30); // accept up to ±30s of skew
+$jwt = JWT::for()->withLeeway(30);   // accept up to ±30s of skew
+$jwt = JWT::for()->withLeeway(null); // reset to no leeway
 ```
+
+`withLeeway()` accepts `null` to reset to "no leeway"; a negative value throws `InvalidArgumentException`.
 
 ---
 
@@ -193,6 +205,15 @@ if ($claims === null) {
     return $this->response->setStatusCode(401);
 }
 ```
+
+### Fail-closed configuration guards
+
+The library refuses unsafe configurations up front instead of silently producing weak tokens. `JWTConfigurationException` is thrown when:
+
+- `jwt.validateClaims` does **not** contain `'SignedWith'` while `jwt.validate = true` — `decode()` will not skip signature verification. To decode without any validation, set `jwt.validate = false` (intended for tests/debug only; `decode()` then logs a `warning`).
+- `jwt.algorithmType` and `jwt.algorithm` disagree — `'symmetric'` requires an `Lcobucci\JWT\Signer\Hmac\*` signer, `'asymmetric'` requires `Rsa\*` or `Ecdsa\*`. (E.g. leaving the default HMAC `Sha256` on an `'asymmetric'` type is caught with a clear message instead of a cryptic key error.)
+
+An invalid `jwt.canOnlyBeUsedAfter` or `jwt.expiresAt` modifier (anything `DateTimeImmutable::modify()` rejects) throws `InvalidArgumentException` consistently across PHP versions.
 
 ---
 
@@ -225,6 +246,8 @@ php spark jwt:key --force
 php spark jwt:keypair --algorithm=rsa   --bits=2048
 php spark jwt:keypair --algorithm=ecdsa --curve=prime256v1 --output=writable/keys
 ```
+
+> On Windows, `jwt:keypair` warns that `chmod()` cannot enforce file permissions — restrict the private key with NTFS ACLs (e.g. `icacls`) instead. It also warns when `--passphrase` is passed on the command line, because that value can leak via the process list and shell history; prefer a secrets manager or interactive entry.
 
 ---
 

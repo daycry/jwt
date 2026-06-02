@@ -162,7 +162,7 @@ Generates an RSA or ECDSA key pair on disk and prints the `.env` snippet to copy
 | `--curve` | `prime256v1` | ECDSA curve. Common: `prime256v1`, `secp384r1`, `secp521r1`. Ignored for RSA. |
 | `--output` | `writable/keys` | Directory for the generated `.pem` files. Created if missing (mode `0700`). |
 | `--name` | `jwt` | Base file name. Result: `<name>-private.pem` + `<name>-public.pem`. |
-| `--passphrase` | *(none)* | Encrypt the private key with this passphrase. Don't forget to also set `Config\JWT::$passphrase`. |
+| `--passphrase` | *(none)* | Encrypt the private key with this passphrase. Don't forget to also set `Config\JWT::$passphrase`. ⚠️ Passing it on the command line exposes it via the process list and shell history — see the warning below. |
 | `--force` | *(absent)* | Overwrite existing files at the target path. Without it the command refuses to clobber. |
 
 ### Examples
@@ -180,6 +180,26 @@ php spark jwt:keypair --algorithm=rsa --bits=4096 \
                      --passphrase='something-strong'
 ```
 
-The command prints the exact `.env` keys you need to set afterwards. The private file is `chmod 0600`, the public file `chmod 0644`.
+The command prints the exact `.env` keys (and the `app/Config/JWT.php` `$algorithm` line) you need to set afterwards. On Unix-like systems the private file is `chmod 0600` and the public file `chmod 0644`.
+
+### Windows: chmod cannot enforce permissions
+
+`chmod()` is a silent no-op on Windows, so the private key is **not** restricted by its POSIX mode bits there. The command detects this and prints a warning for each key file:
+
+```
+⚠️  <path> cannot be restricted with chmod() on Windows. Lock it down with NTFS ACLs (e.g. icacls) so only the service account can read it.
+```
+
+Restrict the private key yourself via NTFS ACLs — for example with `icacls` — so that only the service account running your application can read it.
+
+### Passphrase exposure on the command line
+
+Passing `--passphrase=…` on the command line is risky: the value can leak through the process list (e.g. `ps`/Task Manager) and your shell history. When a non-empty passphrase is supplied the command warns:
+
+```
+⚠️  Passing --passphrase on the command line can expose it via the process list and shell history. Prefer a secrets manager or interactive entry.
+```
+
+Prefer a secrets manager (or another out-of-band mechanism) to provide the passphrase instead.
 
 > ⚠️ Never commit the private key. Store it outside the repository (e.g. CI secret store, vault) when possible.

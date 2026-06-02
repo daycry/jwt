@@ -62,9 +62,11 @@ jwt.signer = "<paste-the-key-generated-above-here>"
 use Daycry\JWT\JWT;
 
 // --- Encoding ---
-$jwt   = new JWT();
-$token = $jwt->encode('hello world');   // scalar payload
-// $token = $jwt->encode(['user_id' => 1, 'role' => 'admin'], 'user-1');
+$jwt   = JWT::for();                     // falls back to config('JWT')
+$token = $jwt->encode('hello world');    // scalar payload
+// A uid may be a string or an integer ID (e.g. a DB primary key);
+// the JSON type is preserved, so an integer uid round-trips as an integer.
+// $token = $jwt->encode(['user_id' => 1, 'role' => 'admin'], 42);
 
 // --- Decoding ---
 $claims = $jwt->decode($token);

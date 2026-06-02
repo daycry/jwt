@@ -56,7 +56,7 @@ src/
 
 Design notes:
 
-- **Immutable instances.** `withSplitData()`, `withParamData()`, `withLeeway()` return new instances — the original is never mutated.
+- **Immutable instances.** `withSplitData()`, `withParamData()`, `withLeeway()`, `withExpiresAt()` return new instances — the original is never mutated.
 - **Always-validate.** `decode()` always throws on parse or validation failure. `tryDecode()` returns `?Plain` for non-throwing flows.
 - **Symmetric + asymmetric.** `Config\JWT::$algorithmType` toggles between HMAC (`signer`) and RSA/ECDSA (`signingKey` + `verifyingKey`).
 - **No global state, no caches.** Validation constraints are rebuilt per call; `LooseValidAt` always uses the current clock instead of a frozen one.
