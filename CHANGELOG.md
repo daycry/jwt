@@ -4,7 +4,7 @@ All notable changes to `daycry/jwt` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [3.1.0]
+## [3.1.0] — 2026-06-02
 
 ### Added
 - New `JWT::withExpiresAt(string $modifier)` method — a per-instance override of the `expiresAt` modifier (e.g. `JWT::for()->withExpiresAt('+5 minutes')->encode($data)` for short-lived access tokens) **without** mutating the shared config. Returns a new instance, mirroring `withLeeway()` / `withSplitData()` / `withParamData()`. Throws `InvalidArgumentException` on an empty string.
@@ -91,7 +91,7 @@ First 2.x release.
 
 Earlier releases targeted `lcobucci/jwt ^4` and exposed the union-typed `decode()` API. They are no longer maintained — please upgrade to 3.x.
 
-[Unreleased]: https://github.com/daycry/jwt/compare/v3.0.0...HEAD
+[3.1.0]: https://github.com/daycry/jwt/releases/tag/v3.1.0
 [3.0.0]: https://github.com/daycry/jwt/releases/tag/v3.0.0
 [2.0.1]: https://github.com/daycry/jwt/releases/tag/v2.0.1
 [2.0.0]: https://github.com/daycry/jwt/releases/tag/v2.0.0
