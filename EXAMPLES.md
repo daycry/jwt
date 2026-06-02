@@ -20,7 +20,7 @@ class AuthController extends ResourceController
     
     public function __construct()
     {
-        $this->jwt = new JWT();
+        $this->jwt = JWT::for();
     }
     
     public function login()
@@ -126,7 +126,7 @@ class JWTAuthFilter implements FilterInterface
     
     public function __construct()
     {
-        $this->jwt = new JWT();
+        $this->jwt = JWT::for();
     }
     
     public function before(RequestInterface $request, $arguments = null)
@@ -151,8 +151,8 @@ class JWTAuthFilter implements FilterInterface
         try {
             $claims = $this->jwt->decode($token);
             $request->jwtClaims = $claims;
-            $request->currentUserId = $claims->get('uid');
-            $request->userRoles = json_decode($claims->get('data'), true)['roles'] ?? [];
+            $request->currentUserId = $claims->claims()->get('uid');
+            $request->userRoles = json_decode($claims->claims()->get('data'), true)['roles'] ?? [];
         } catch (\Exception $e) {
             return $this->unauthorizedResponse('Token validation failed');
         }
@@ -342,7 +342,7 @@ Create `app/Helpers/jwt_helper.php`:
 if (!function_exists('jwt_encode')) {
     function jwt_encode(array $data, ?string $uid = null): string
     {
-        $jwt = new \Daycry\JWT\JWT();
+        $jwt = \Daycry\JWT\JWT::for();
         return $jwt->encode($data, $uid);
     }
 }
@@ -351,9 +351,9 @@ if (!function_exists('jwt_decode')) {
     function jwt_decode(string $token): ?array
     {
         try {
-            $jwt = new \Daycry\JWT\JWT();
+            $jwt = \Daycry\JWT\JWT::for();
             $claims = $jwt->decode($token);
-            return $claims->all();
+            return $claims->claims()->all();
         } catch (\Exception $e) {
             return null;
         }
@@ -376,7 +376,7 @@ if (!function_exists('jwt_user_roles')) {
     }
 }
 
-if (!function_calls('jwt_check')) {
+if (!function_exists('jwt_check')) {
     function jwt_check(): bool
     {
         return jwt_user_id() !== null;
@@ -407,12 +407,12 @@ Add to your `.env` file:
 
 ```env
 # JWT Configuration
-JWT_SECRET_KEY=your-very-secure-base64-encoded-key-here
-JWT_ISSUER=https://yourdomain.com
-JWT_AUDIENCE=https://yourdomain.com
-JWT_IDENTIFIER=your-app-unique-id
-JWT_EXPIRES_AT="+2 hours"
-JWT_ALGORITHM="Lcobucci\JWT\Signer\Hmac\Sha256"
+jwt.signer=your-very-secure-base64-encoded-key-here
+jwt.issuer=https://yourdomain.com
+jwt.audience=https://yourdomain.com
+jwt.identifier=your-app-unique-id
+jwt.expiresAt="+2 hours"
+jwt.algorithm="Lcobucci\JWT\Signer\Hmac\Sha256"
 
 # Development vs Production
 CI_ENVIRONMENT=development
@@ -552,7 +552,7 @@ class AuthenticationTest extends CIUnitTestCase
     
     public function testProtectedRouteWithValidToken()
     {
-        $jwt = new \Daycry\JWT\JWT();
+        $jwt = \Daycry\JWT\JWT::for();
         $token = $jwt->encode(['user_id' => 1], 1);
         
         $response = $this->withHeaders([
