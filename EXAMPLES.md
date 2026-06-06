@@ -63,15 +63,19 @@ class AuthController extends ResourceController
     public function refresh()
     {
         $token = $this->extractToken();
-        
-        if (!$token || $this->jwt->isExpired($token)) {
-            return $this->respond(['error' => 'Token expired'], 401);
+
+        // Fully validate the presented token (signature + registered claims)
+        // BEFORE trusting any claim or minting a new token. Never gate a refresh
+        // on isExpired()/extractClaimsUnsafe(): those parse without verifying the
+        // signature, so a forged token would yield a brand-new, valid token.
+        $decoded = $token !== null ? $this->jwt->tryDecode($token) : null;
+
+        if ($decoded === null) {
+            return $this->respond(['error' => 'Invalid or expired token'], 401);
         }
-        
-        // Quick check without full validation
-        $claims = $this->jwt->extractClaimsUnsafe($token);
-        $userId = $claims['uid'] ?? null;
-        
+
+        $userId = $decoded->claims()->get('uid');
+
         if (!$userId) {
             return $this->respond(['error' => 'Invalid token'], 401);
         }
@@ -137,14 +141,11 @@ class JWTAuthFilter implements FilterInterface
             return $this->unauthorizedResponse('Token not provided');
         }
         
-        // Fast validation
+        // Full validation: isValid() verifies the signature AND every configured
+        // claim (including expiry via LooseValidAt), so no separate isExpired()
+        // check is needed — and isExpired() alone would not verify the signature.
         if (!$this->jwt->isValid($token)) {
-            return $this->unauthorizedResponse('Invalid token');
-        }
-        
-        // Quick expiry check
-        if ($this->jwt->isExpired($token)) {
-            return $this->unauthorizedResponse('Token expired');
+            return $this->unauthorizedResponse('Invalid or expired token');
         }
         
         // Extract user data and inject into request
@@ -334,13 +335,15 @@ class UsersController extends ResourceController
 
 ## 🛠️ Helper Functions Implementation
 
+> **Note:** `jwt_user_id()`, `jwt_user_roles()` and `jwt_can()` read `currentUserId` / `userRoles` / `userPermissions` from the request. Those properties are populated by the example `JWTAuthFilter` above — the library does **not** set them — so the helpers only work on routes the filter covers.
+
 Create `app/Helpers/jwt_helper.php`:
 
 ```php
 <?php
 
 if (!function_exists('jwt_encode')) {
-    function jwt_encode(array $data, ?string $uid = null): string
+    function jwt_encode(array $data, int|string|null $uid = null): string
     {
         $jwt = \Daycry\JWT\JWT::for();
         return $jwt->encode($data, $uid);
@@ -412,7 +415,7 @@ jwt.issuer=https://yourdomain.com
 jwt.audience=https://yourdomain.com
 jwt.identifier=your-app-unique-id
 jwt.expiresAt="+2 hours"
-jwt.algorithm="Lcobucci\JWT\Signer\Hmac\Sha256"
+jwt.algorithm="Lcobucci\\JWT\\Signer\\Hmac\\Sha256"
 
 # Development vs Production
 CI_ENVIRONMENT=development

@@ -44,8 +44,10 @@ final class TenantTokenRouter
 
     private function peekIssuer(string $token): string
     {
-        // Use a throwaway config that *only* parses headers and claims.
-        $inspector                        = config('JWT');
+        // Use a throwaway config that *only* parses headers and claims. Clone it
+        // so the request-wide config('JWT') singleton is never left with
+        // validation disabled — that would weaken every other verifier this request.
+        $inspector                        = clone config('JWT');
         $inspector->allowUnsafeExtraction = true;
         $inspector->validate              = false;
 
