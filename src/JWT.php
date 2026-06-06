@@ -59,6 +59,12 @@ final class JWT
     private ?int $leewaySeconds;
     private ?string $expiresAtOverride = null;
 
+    /**
+     * Lazily-built, memoized signer + key configuration. Stateless (no clock),
+     * so it is safe to reuse across calls and to share across `with*()` clones.
+     */
+    private ?Configuration $configuration = null;
+
     public function __construct(private JWTConfig $config)
     {
         $this->leewaySeconds = $config->leeway;
@@ -381,7 +387,15 @@ final class JWT
 
     private function buildConfiguration(): Configuration
     {
-        return match ($this->config->algorithmType) {
+        // Memoize the stateless signer + key configuration for this immutable
+        // instance: decode() builds it once and the SignedWith constraint reuses
+        // the same instance, so we no longer rebuild the Configuration twice per
+        // call nor re-read the asymmetric PEM from disk. The misconfiguration
+        // guards (missingSigner / algorithmMismatch / missingClaim) still run on
+        // the first build. This caches only the key material — the time-dependent
+        // LooseValidAt / StrictValidAt constraints are deliberately rebuilt per
+        // call (see buildValidationConstraints()).
+        return $this->configuration ??= match ($this->config->algorithmType) {
             'symmetric'  => $this->buildSymmetricConfiguration(),
             'asymmetric' => $this->buildAsymmetricConfiguration(),
             default      => throw JWTConfigurationException::invalidAlgorithmType($this->config->algorithmType),
