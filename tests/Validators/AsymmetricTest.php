@@ -227,4 +227,39 @@ final class AsymmetricTest extends CIUnitTestCase
         $this->expectException(Throwable::class);
         $jwt->encode('admin');
     }
+
+    public function testKeyRotationSelectsVerifyingKeyByKid(): void
+    {
+        [$privateA, $publicA] = $this->generateRsaKeyPair('rotA');
+        [, $publicB]          = $this->generateRsaKeyPair('rotB');
+
+        // Issue with key A, tagged kid=kA.
+        $issuer        = $this->buildAsymmetricConfig(RsaSha256::class, $privateA, $publicA);
+        $issuer->keyId = 'kA';
+        $token         = (new JWT($issuer))->encode('payload');
+
+        // The verifier's DEFAULT key is the WRONG one (B); only the rotation map
+        // points kid=kA at the correct public key A.
+        $verifier                = $this->buildAsymmetricConfig(RsaSha256::class, $privateA, $publicB);
+        $verifier->verifyingKeys = ['kA' => $publicA];
+
+        $this->assertSame('payload', (new JWT($verifier))->decode($token)->claims()->get('data'));
+    }
+
+    public function testTokenWithUnknownKidFallsBackToDefaultAndFails(): void
+    {
+        [$privateA, $publicA] = $this->generateRsaKeyPair('rotA');
+        [, $publicB]          = $this->generateRsaKeyPair('rotB');
+
+        $issuer        = $this->buildAsymmetricConfig(RsaSha256::class, $privateA, $publicA);
+        $issuer->keyId = 'unknown';
+        $token         = (new JWT($issuer))->encode('payload');
+
+        // kid 'unknown' is not in the map → falls back to the default (wrong) key B.
+        $verifier                = $this->buildAsymmetricConfig(RsaSha256::class, $privateA, $publicB);
+        $verifier->verifyingKeys = ['kA' => $publicA];
+
+        $this->expectException(RequiredConstraintsViolated::class);
+        (new JWT($verifier))->decode($token);
+    }
 }

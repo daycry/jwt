@@ -68,6 +68,24 @@ class JWT extends BaseConfig
      */
     public ?string $passphrase = null;
 
+    /**
+     * Optional key identifier. When set, it is written as the `kid` header on
+     * every issued token so verifiers can pick the matching key during rotation.
+     * Override per instance with `JWT::withKeyId()`.
+     */
+    public ?string $keyId = null;
+
+    /**
+     * Verification keys for key rotation, mapped by `kid`. During `decode()` the
+     * token's `kid` header selects the matching key here (falling back to
+     * `$verifyingKey` / `$signer` when absent). Values are PEM contents or paths
+     * for asymmetric, or base64 secrets for symmetric. The configured signer
+     * (algorithm) is always used, so a token's `kid` can never downgrade it.
+     *
+     * @var array<string, string>
+     */
+    public array $verifyingKeys = [];
+
     public ?string $issuer     = null;
     public ?string $audience   = null;
     public ?string $identifier = null;

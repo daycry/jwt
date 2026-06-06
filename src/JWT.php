@@ -63,6 +63,42 @@ final class JWT
     private ?string $expiresAtOverride = null;
 
     /**
+     * @var non-empty-string|null
+     */
+    private ?string $issuerOverride = null;
+
+    /**
+     * @var non-empty-string|null
+     */
+    private ?string $identifierOverride = null;
+
+    /**
+     * @var non-empty-string|null
+     */
+    private ?string $keyIdOverride = null;
+
+    /**
+     * Per-instance audience override. Null means "use the configured audience".
+     *
+     * @var non-empty-list<non-empty-string>|null
+     */
+    private ?array $audienceOverride = null;
+
+    /**
+     * Extra top-level claims to merge into every token (compact or split mode).
+     *
+     * @var array<non-empty-string, mixed>
+     */
+    private array $extraClaims = [];
+
+    /**
+     * Extra JOSE headers to write on every token.
+     *
+     * @var array<non-empty-string, mixed>
+     */
+    private array $extraHeaders = [];
+
+    /**
      * Lazily-built, memoized signer + key configuration. Stateless (no clock),
      * so it is safe to reuse across calls and to share across `with*()` clones.
      */
@@ -134,6 +170,125 @@ final class JWT
         return $clone;
     }
 
+    /**
+     * Override the `iss` claim for this instance only (encode + validate).
+     */
+    public function withIssuer(string $issuer): self
+    {
+        if ($issuer === '') {
+            throw new InvalidArgumentException('issuer cannot be empty.');
+        }
+        $clone                 = clone $this;
+        $clone->issuerOverride = $issuer;
+
+        return $clone;
+    }
+
+    /**
+     * Override the `aud` claim(s) for this instance only. Multiple audiences are
+     * written on encode; validation requires the token to be permitted for the
+     * first audience.
+     */
+    public function withAudience(string ...$audiences): self
+    {
+        if ($audiences === []) {
+            throw new InvalidArgumentException('At least one audience is required.');
+        }
+        $validated = [];
+
+        foreach ($audiences as $audience) {
+            if ($audience === '') {
+                throw new InvalidArgumentException('audience cannot be empty.');
+            }
+            $validated[] = $audience;
+        }
+        $clone                   = clone $this;
+        $clone->audienceOverride = $validated;
+
+        return $clone;
+    }
+
+    /**
+     * Override the `jti` (identifier) claim for this instance only.
+     */
+    public function withIdentifier(string $identifier): self
+    {
+        if ($identifier === '') {
+            throw new InvalidArgumentException('identifier cannot be empty.');
+        }
+        $clone                     = clone $this;
+        $clone->identifierOverride = $identifier;
+
+        return $clone;
+    }
+
+    /**
+     * Override the `kid` header for this instance only (key rotation).
+     */
+    public function withKeyId(string $keyId): self
+    {
+        if ($keyId === '') {
+            throw new InvalidArgumentException('keyId cannot be empty.');
+        }
+        $clone                = clone $this;
+        $clone->keyIdOverride = $keyId;
+
+        return $clone;
+    }
+
+    /**
+     * Add a custom JOSE header to issued tokens. The internal `cty` header
+     * (written for compact JSON payloads) cannot be overridden.
+     */
+    public function withHeader(string $name, mixed $value): self
+    {
+        if ($name === '' || $name === 'cty') {
+            throw new InvalidArgumentException(sprintf('Header name "%s" is reserved or empty.', $name));
+        }
+        $clone                      = clone $this;
+        $clone->extraHeaders        = $this->extraHeaders;
+        $clone->extraHeaders[$name] = $value;
+
+        return $clone;
+    }
+
+    /**
+     * Add several custom JOSE headers at once.
+     *
+     * @param array<string, mixed> $headers
+     */
+    public function withHeaders(array $headers): self
+    {
+        $clone = $this;
+
+        foreach ($headers as $name => $value) {
+            $clone = $clone->withHeader($name, $value);
+        }
+
+        return $clone;
+    }
+
+    /**
+     * Add custom top-level claims to issued tokens. Reserved claim names (`uid`
+     * and the registered JWT claims) are rejected to surface collisions early.
+     *
+     * @param array<string, mixed> $claims
+     */
+    public function withClaims(array $claims): self
+    {
+        $clone              = clone $this;
+        $clone->extraClaims = $this->extraClaims;
+
+        foreach ($claims as $name => $value) {
+            if ($name === '' || in_array($name, self::RESERVED_CLAIMS, true)) {
+                throw new InvalidArgumentException(sprintf('Claim name "%s" is reserved or empty.', $name));
+            }
+            $clone->extraClaims[$name] = $value;
+        }
+
+        return $clone;
+    }
+
     public function getParamData(): string
     {
         return $this->paramData;
@@ -149,9 +304,9 @@ final class JWT
         $now           = new DateTimeImmutable();
         $configuration = $this->buildConfiguration();
 
-        $issuer     = $this->requireClaim($this->config->issuer, 'issuer');
-        $audience   = $this->requireClaim($this->config->audience, 'audience');
-        $identifier = $this->requireClaim($this->config->identifier, 'identifier');
+        $issuer     = $this->resolveIssuer();
+        $audiences  = $this->resolveAudiences();
+        $identifier = $this->resolveIdentifier();
 
         $builder = $this->applyPayload($configuration->builder(), $data);
 
@@ -162,6 +317,19 @@ final class JWT
                 $this->logUidCollisionWarning();
             }
             $builder = $builder->withClaim('uid', $resolvedUid);
+        }
+
+        foreach ($this->extraClaims as $name => $value) {
+            $builder = $builder->withClaim($name, $value);
+        }
+
+        foreach ($this->extraHeaders as $name => $value) {
+            $builder = $builder->withHeader($name, $value);
+        }
+
+        $keyId = $this->keyIdOverride ?? $this->config->keyId;
+        if ($keyId !== null && $keyId !== '') {
+            $builder = $builder->withHeader('kid', $keyId);
         }
 
         $notBefore = $this->applyModifier($now, $this->config->canOnlyBeUsedAfter, 'canOnlyBeUsedAfter');
@@ -179,7 +347,7 @@ final class JWT
 
         $token = $builder
             ->issuedBy($issuer)
-            ->permittedFor($audience)
+            ->permittedFor(...$audiences)
             ->identifiedBy($identifier)
             ->issuedAt($now)
             ->canOnlyBeUsedAfter($notBefore)
@@ -211,7 +379,11 @@ final class JWT
         }
 
         if ($this->config->validate) {
-            $configuration->validator()->assert($parsed, ...$this->buildValidationConstraints());
+            $kid = $parsed->headers()->get('kid');
+            $configuration->validator()->assert(
+                $parsed,
+                ...$this->buildValidationConstraints(is_string($kid) ? $kid : null),
+            );
         } else {
             $this->logValidationDisabledWarning();
         }
@@ -257,6 +429,37 @@ final class JWT
         }
 
         return $value;
+    }
+
+    /**
+     * Validate the token and return all of its claims. The validated counterpart
+     * of `extractClaimsUnsafe()`.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws InvalidTokenException
+     * @throws JWTConfigurationException
+     * @throws RequiredConstraintsViolated
+     */
+    public function getClaims(string $token): array
+    {
+        return $this->decode($token)->claims()->all();
+    }
+
+    /**
+     * Validate the token and return a single claim value (null when absent).
+     *
+     * @throws InvalidTokenException
+     * @throws JWTConfigurationException
+     * @throws RequiredConstraintsViolated
+     */
+    public function getClaim(string $token, string $name): mixed
+    {
+        if ($name === '') {
+            return null;
+        }
+
+        return $this->decode($token)->claims()->get($name);
     }
 
     /**
@@ -483,7 +686,7 @@ final class JWT
     /**
      * @return list<Constraint>
      */
-    private function buildValidationConstraints(): array
+    private function buildValidationConstraints(?string $kid = null): array
     {
         if (! in_array(ConstraintName::SignedWith->value, $this->config->validateClaims, true)) {
             throw JWTConfigurationException::missingSignatureConstraint();
@@ -496,16 +699,10 @@ final class JWT
                 ?? throw JWTConfigurationException::unknownConstraint($name);
 
             $constraints[] = match ($constraint) {
-                ConstraintName::SignedWith => $this->buildSignedWithConstraint(),
-                ConstraintName::IssuedBy   => new IssuedBy(
-                    $this->requireClaim($this->config->issuer, 'issuer'),
-                ),
-                ConstraintName::IdentifiedBy => new IdentifiedBy(
-                    $this->requireClaim($this->config->identifier, 'identifier'),
-                ),
-                ConstraintName::PermittedFor => new PermittedFor(
-                    $this->requireClaim($this->config->audience, 'audience'),
-                ),
+                ConstraintName::SignedWith    => $this->buildSignedWithConstraint($kid),
+                ConstraintName::IssuedBy      => new IssuedBy($this->resolveIssuer()),
+                ConstraintName::IdentifiedBy  => new IdentifiedBy($this->resolveIdentifier()),
+                ConstraintName::PermittedFor  => new PermittedFor($this->resolveAudiences()[0]),
                 ConstraintName::StrictValidAt => new StrictValidAt(
                     SystemClock::fromUTC(),
                     $this->buildLeewayInterval(),
@@ -520,11 +717,59 @@ final class JWT
         return $constraints;
     }
 
-    private function buildSignedWithConstraint(): SignedWith
+    private function buildSignedWithConstraint(?string $kid = null): SignedWith
     {
         $configuration = $this->buildConfiguration();
 
-        return new SignedWith($configuration->signer(), $configuration->verificationKey());
+        // Key rotation: a token's `kid` header selects the matching verification
+        // key from Config\JWT::$verifyingKeys. The configured signer (algorithm)
+        // is always used, so an attacker-chosen kid can never downgrade it.
+        $verificationKey = $this->resolveVerificationKey($kid) ?? $configuration->verificationKey();
+
+        return new SignedWith($configuration->signer(), $verificationKey);
+    }
+
+    private function resolveVerificationKey(?string $kid): ?Key
+    {
+        if ($kid === null || $this->config->verifyingKeys === []) {
+            return null;
+        }
+
+        $reference = $this->config->verifyingKeys[$kid] ?? null;
+        if (! is_string($reference) || $reference === '') {
+            return null;
+        }
+
+        // Asymmetric: PEM contents or path. Symmetric: base64-encoded secret.
+        if (AlgorithmType::tryFrom($this->config->algorithmType) === AlgorithmType::Asymmetric) {
+            return $this->loadKey($reference, '');
+        }
+
+        return InMemory::base64Encoded($reference);
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    private function resolveIssuer(): string
+    {
+        return $this->issuerOverride ?? $this->requireClaim($this->config->issuer, 'issuer');
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    private function resolveIdentifier(): string
+    {
+        return $this->identifierOverride ?? $this->requireClaim($this->config->identifier, 'identifier');
+    }
+
+    /**
+     * @return non-empty-list<non-empty-string>
+     */
+    private function resolveAudiences(): array
+    {
+        return $this->audienceOverride ?? [$this->requireClaim($this->config->audience, 'audience')];
     }
 
     /**
