@@ -7,11 +7,14 @@ namespace Daycry\JWT\Commands;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 use Config\Autoload;
+use Daycry\JWT\Commands\Concerns\PreparesPaths;
 use RuntimeException;
 use Throwable;
 
 class JWTPublish extends BaseCommand
 {
+    use PreparesPaths;
+
     protected $group             = 'JWT';
     protected $name              = 'jwt:publish';
     protected $description       = 'JWT config file publisher.';
@@ -91,9 +94,7 @@ class JWTPublish extends BaseCommand
         }
         $directory = dirname($appPath . $path);
 
-        if (! is_dir($directory) && ! mkdir($directory, 0777, true) && ! is_dir($directory)) {
-            throw new RuntimeException("Cannot create directory: {$directory}");
-        }
+        $this->ensureDirectory($directory, 0777);
 
         if (
             file_exists($appPath . $path)

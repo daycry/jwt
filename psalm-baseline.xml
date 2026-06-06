@@ -2,9 +2,17 @@
 <files psalm-version="6.16.1@f1f5de594dc76faf8784e02d3dc4716c91c6f6ac">
   <file src="src/Commands/JWTGenerateKey.php">
     <MissingOverrideAttribute>
-      <code><![CDATA[public function run(array $params)]]></code>
+      <code><![CDATA[public function run(array $params): int]]></code>
     </MissingOverrideAttribute>
     <UndefinedConstant>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_SUCCESS]]></code>
+      <code><![CDATA[EXIT_SUCCESS]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
       <code><![CDATA[ROOTPATH]]></code>
       <code><![CDATA[ROOTPATH]]></code>
     </UndefinedConstant>
@@ -52,6 +60,13 @@
       <code><![CDATA[LoggerConfig]]></code>
       <code><![CDATA[LoggerConfig]]></code>
     </UndefinedClass>
+    <UndefinedConstant>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_SUCCESS]]></code>
+      <code><![CDATA[EXIT_SUCCESS]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
+      <code><![CDATA[EXIT_USER_INPUT]]></code>
+    </UndefinedConstant>
   </file>
   <file src="tests/Commands/JWTKeyPairTest.php">
     <MissingOverrideAttribute>
@@ -61,6 +76,11 @@
     <UndefinedClass>
       <code><![CDATA[LoggerConfig]]></code>
     </UndefinedClass>
+    <UndefinedConstant>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_ERROR]]></code>
+      <code><![CDATA[EXIT_SUCCESS]]></code>
+    </UndefinedConstant>
   </file>
   <file src="tests/Commands/JWTKeyPairWriteKeyFileTest.php">
     <MissingOverrideAttribute>

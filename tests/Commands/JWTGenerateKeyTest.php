@@ -29,6 +29,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
     private ?string $tmpDir        = null;
     private string $envPath        = '';
     private string $envExamplePath = '';
+    private int $lastExitCode      = 0;
 
     protected function setUp(): void
     {
@@ -76,8 +77,8 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
         $this->setCliOptions($options);
         $this->resetStreamFilterBuffer();
 
-        $command = new JWTGenerateKey(new Logger(new LoggerConfig()), new Commands());
-        $command->run($params);
+        $command            = new JWTGenerateKey(new Logger(new LoggerConfig()), new Commands());
+        $this->lastExitCode = $command->run($params);
 
         return $this->getStreamFilterBuffer();
     }
@@ -112,7 +113,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
             }
         };
 
-        $command->run($params);
+        $this->lastExitCode = $command->run($params);
 
         return $this->getStreamFilterBuffer();
     }
@@ -134,9 +135,10 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
 
     public function testRejectsLengthBelowMinimum(): void
     {
-        $output = $this->runCommand(['8'], ['show' => null]);
+        $output = $this->runCommand(['16'], ['show' => null]);
 
-        $this->assertStringContainsString('at least 16 bytes', $output);
+        $this->assertStringContainsString('at least 32 bytes', $output);
+        $this->assertSame(EXIT_USER_INPUT, $this->lastExitCode);
     }
 
     public function testRejectsLengthAboveMaximum(): void
@@ -144,6 +146,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
         $output = $this->runCommand(['256'], ['show' => null]);
 
         $this->assertStringContainsString('cannot exceed 128 bytes', $output);
+        $this->assertSame(EXIT_USER_INPUT, $this->lastExitCode);
     }
 
     public function testCustomLengthIsRespected(): void
@@ -151,6 +154,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
         $output = $this->runCommand(['64'], ['show' => null]);
 
         $this->assertStringContainsString('Generated JWT Key (64 bytes)', $output);
+        $this->assertSame(EXIT_SUCCESS, $this->lastExitCode);
     }
 
     public function testEnvFileMissingShowsErrorAndExampleHint(): void
@@ -169,6 +173,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
         $output = $this->runCommandSandboxed(['32']);
 
         $this->assertStringContainsString('.env file not found', $output);
+        $this->assertSame(EXIT_ERROR, $this->lastExitCode);
     }
 
     public function testAppendsKeyToEnvWhenMissing(): void
@@ -178,6 +183,7 @@ final class JWTGenerateKeyTest extends CIUnitTestCase
         $output = $this->runCommandSandboxed(['32']);
 
         $this->assertStringContainsString('successfully added', $output);
+        $this->assertSame(EXIT_SUCCESS, $this->lastExitCode);
         $env = (string) file_get_contents($this->envPath);
         $this->assertMatchesRegularExpression('/^jwt\.signer=[A-Za-z0-9+\/=]+$/m', $env);
         $this->assertStringContainsString('# JWT Configuration', $env);

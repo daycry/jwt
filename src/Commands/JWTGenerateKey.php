@@ -22,21 +22,22 @@ class JWTGenerateKey extends BaseCommand
         '--force' => 'Force overwrite existing key in .env',
     ];
 
-    public function run(array $params)
+    public function run(array $params): int
     {
         $length = (int) ($params[0] ?? 32);
 
-        // Validate length
-        if ($length < 16) {
-            CLI::error('Key length must be at least 16 bytes for security');
+        // Validate length. 32 bytes (256-bit) is the floor for HS256, the default
+        // signer; a shorter secret would otherwise fail only later, at encode().
+        if ($length < 32) {
+            CLI::error('Key length must be at least 32 bytes (256-bit) to safely sign with HS256.');
 
-            return;
+            return EXIT_USER_INPUT;
         }
 
         if ($length > 128) {
             CLI::error('Key length cannot exceed 128 bytes');
 
-            return;
+            return EXIT_USER_INPUT;
         }
 
         try {
@@ -46,12 +47,14 @@ class JWTGenerateKey extends BaseCommand
             if (CLI::getOption('show')) {
                 $this->displayKey($key, $length);
 
-                return;
+                return EXIT_SUCCESS;
             }
 
-            $this->updateEnvFile($key);
+            return $this->updateEnvFile($key);
         } catch (Exception $e) {
             CLI::error('Failed to generate key: ' . $e->getMessage());
+
+            return EXIT_ERROR;
         }
     }
 
@@ -82,7 +85,7 @@ class JWTGenerateKey extends BaseCommand
         return ROOTPATH . '.env.example';
     }
 
-    private function updateEnvFile(string $key): void
+    private function updateEnvFile(string $key): int
     {
         $envPath        = $this->envPath();
         $envExamplePath = $this->envExamplePath();
@@ -95,7 +98,7 @@ class JWTGenerateKey extends BaseCommand
                 CLI::write("cp {$envExamplePath} {$envPath}", 'cyan');
             }
 
-            return;
+            return EXIT_ERROR;
         }
 
         $envContent = file_get_contents($envPath);
@@ -109,7 +112,7 @@ class JWTGenerateKey extends BaseCommand
             if (! $forceOverwrite && CLI::prompt('JWT key already exists in .env. Overwrite?', ['y', 'n']) === 'n') {
                 CLI::write('Operation cancelled.', 'yellow');
 
-                return;
+                return EXIT_USER_INPUT;
             }
 
             // Update existing key
@@ -124,8 +127,12 @@ class JWTGenerateKey extends BaseCommand
             CLI::write('Generated key: ' . $key, 'cyan');
             CLI::newLine();
             CLI::write('⚠️  Keep your .env file secure and never commit it to version control!', 'red');
-        } else {
-            CLI::error('Failed to write to .env file. Check permissions.');
+
+            return EXIT_SUCCESS;
         }
+
+        CLI::error('Failed to write to .env file. Check permissions.');
+
+        return EXIT_ERROR;
     }
 }

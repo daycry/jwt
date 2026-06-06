@@ -6,12 +6,26 @@ namespace Daycry\JWT\Commands;
 
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
+use Daycry\JWT\Commands\Concerns\PreparesPaths;
 use OpenSSLAsymmetricKey;
 use RuntimeException;
 use Throwable;
 
 class JWTKeyPair extends BaseCommand
 {
+    use PreparesPaths;
+
+    /**
+     * Supported ECDSA curves mapped to the lcobucci signer that matches each one.
+     * A token signed on a given curve must be verified with the matching signer
+     * (ES256/384/512), so the generated snippet suggests the right class.
+     */
+    private const ECDSA_CURVES = [
+        'prime256v1' => '\\Lcobucci\\JWT\\Signer\\Ecdsa\\Sha256::class',
+        'secp384r1'  => '\\Lcobucci\\JWT\\Signer\\Ecdsa\\Sha384::class',
+        'secp521r1'  => '\\Lcobucci\\JWT\\Signer\\Ecdsa\\Sha512::class',
+    ];
+
     protected $group       = 'JWT';
     protected $name        = 'jwt:keypair';
     protected $description = 'Generate an RSA or ECDSA key pair for asymmetric JWT signing.';
@@ -47,9 +61,7 @@ class JWTKeyPair extends BaseCommand
                 );
             }
 
-            if (! is_dir($output) && ! mkdir($output, 0700, true) && ! is_dir($output)) {
-                throw new RuntimeException("Cannot create output directory: {$output}");
-            }
+            $this->ensureDirectory($output, 0700);
 
             $privatePath = rtrim($output, '/\\') . DIRECTORY_SEPARATOR . $name . '-private.pem';
             $publicPath  = rtrim($output, '/\\') . DIRECTORY_SEPARATOR . $name . '-public.pem';
@@ -89,9 +101,12 @@ class JWTKeyPair extends BaseCommand
             if ($passphraseString !== null) {
                 CLI::write('jwt.passphrase    = "<your-passphrase>"', 'cyan');
             }
-            $signerSuggestion = $algorithm === 'ecdsa'
-                ? '\\Lcobucci\\JWT\\Signer\\Ecdsa\\Sha256::class'
-                : '\\Lcobucci\\JWT\\Signer\\Rsa\\Sha256::class';
+            if ($algorithm === 'ecdsa') {
+                $curve            = (string) (CLI::getOption('curve') ?? 'prime256v1');
+                $signerSuggestion = self::ECDSA_CURVES[$curve] ?? self::ECDSA_CURVES['prime256v1'];
+            } else {
+                $signerSuggestion = '\\Lcobucci\\JWT\\Signer\\Rsa\\Sha256::class';
+            }
             CLI::newLine();
             CLI::write('And in app/Config/JWT.php set:', 'yellow');
             CLI::write("public string \$algorithm = {$signerSuggestion};", 'cyan');
@@ -151,6 +166,13 @@ class JWTKeyPair extends BaseCommand
             ]);
         } elseif ($algorithm === 'ecdsa') {
             $curve = (string) (CLI::getOption('curve') ?? 'prime256v1');
+            if (! isset(self::ECDSA_CURVES[$curve])) {
+                throw new RuntimeException(sprintf(
+                    'Unsupported ECDSA curve: %s. Use one of: %s.',
+                    $curve,
+                    implode(', ', array_keys(self::ECDSA_CURVES)),
+                ));
+            }
 
             $key = openssl_pkey_new([
                 'private_key_type' => OPENSSL_KEYTYPE_EC,

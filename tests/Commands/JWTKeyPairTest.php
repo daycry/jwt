@@ -25,7 +25,8 @@ final class JWTKeyPairTest extends CIUnitTestCase
      */
     private array $originalOptions = [];
 
-    private ?string $tmpDir = null;
+    private ?string $tmpDir   = null;
+    private int $lastExitCode = 0;
 
     protected function setUp(): void
     {
@@ -87,8 +88,8 @@ final class JWTKeyPairTest extends CIUnitTestCase
         $this->setCliOptions($options);
         $this->resetStreamFilterBuffer();
 
-        $command = new JWTKeyPair(new Logger(new LoggerConfig()), new Commands());
-        $command->run([]);
+        $command            = new JWTKeyPair(new Logger(new LoggerConfig()), new Commands());
+        $this->lastExitCode = $command->run([]);
 
         return $this->getStreamFilterBuffer();
     }
@@ -174,5 +175,60 @@ final class JWTKeyPairTest extends CIUnitTestCase
         $regenerated = file_get_contents($this->tmpDir . '/overwrite-private.pem');
 
         $this->assertNotSame($original, $regenerated, 'Force flag should regenerate the key');
+    }
+
+    public function testUnsupportedAlgorithmIsRejected(): void
+    {
+        $output = $this->runCommand([
+            'algorithm' => 'dsa',
+            'output'    => $this->tmpDir,
+            'name'      => 'bad-algo',
+        ]);
+
+        $this->assertStringContainsString('Unsupported algorithm', $output);
+        $this->assertSame(EXIT_ERROR, $this->lastExitCode);
+    }
+
+    public function testUnsupportedEcdsaCurveIsRejected(): void
+    {
+        $output = $this->runCommand([
+            'algorithm' => 'ecdsa',
+            'curve'     => 'not-a-curve',
+            'output'    => $this->tmpDir,
+            'name'      => 'bad-curve',
+        ]);
+
+        $this->assertStringContainsString('Unsupported ECDSA curve', $output);
+        $this->assertSame(EXIT_ERROR, $this->lastExitCode);
+    }
+
+    public function testEcdsaSnippetSuggestsSignerMatchingCurve(): void
+    {
+        $output = $this->runCommand([
+            'algorithm' => 'ecdsa',
+            'curve'     => 'secp384r1',
+            'output'    => $this->tmpDir,
+            'name'      => 'es384',
+        ]);
+
+        $this->assertStringContainsString('Ecdsa\\Sha384', $output);
+    }
+
+    public function testGeneratesEncryptedPrivateKeyAndWarns(): void
+    {
+        $output = $this->runCommand([
+            'algorithm'  => 'rsa',
+            'bits'       => '2048',
+            'output'     => $this->tmpDir,
+            'name'       => 'encrypted',
+            'passphrase' => 'super-secret',
+        ]);
+
+        $this->assertStringContainsString('Passing --passphrase on the command line can expose it', $output);
+        $this->assertStringContainsString('jwt.passphrase', $output);
+        $this->assertSame(EXIT_SUCCESS, $this->lastExitCode);
+
+        $private = (string) file_get_contents($this->tmpDir . '/encrypted-private.pem');
+        $this->assertStringContainsString('ENCRYPTED', $private);
     }
 }

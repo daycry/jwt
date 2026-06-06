@@ -67,13 +67,13 @@ parameters:
 			path: src/JWT.php
 
 		-
-			message: '#^Method Daycry\\JWT\\Commands\\JWTGenerateKey@anonymous/tests/Commands/JWTGenerateKeyTest\.php\:94\:\:__construct\(\) has parameter \$commands with no type specified\.$#'
+			message: '#^Method Daycry\\JWT\\Commands\\JWTGenerateKey@anonymous/tests/Commands/JWTGenerateKeyTest\.php\:95\:\:__construct\(\) has parameter \$commands with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1
 			path: tests/Commands/JWTGenerateKeyTest.php
 
 		-
-			message: '#^Method Daycry\\JWT\\Commands\\JWTGenerateKey@anonymous/tests/Commands/JWTGenerateKeyTest\.php\:94\:\:__construct\(\) has parameter \$logger with no type specified\.$#'
+			message: '#^Method Daycry\\JWT\\Commands\\JWTGenerateKey@anonymous/tests/Commands/JWTGenerateKeyTest\.php\:95\:\:__construct\(\) has parameter \$logger with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1
 			path: tests/Commands/JWTGenerateKeyTest.php
@@ -123,12 +123,6 @@ parameters:
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Lcobucci\\JWT\\Token\\Plain will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
-			count: 1
-			path: tests/Performance/JWTPerformanceTest.php
-
-		-
-			message: '#^Only booleans are allowed in a ternary operator condition, mixed given\.$#'
-			identifier: ternary.condNotBoolean
 			count: 1
 			path: tests/Performance/JWTPerformanceTest.php
 
