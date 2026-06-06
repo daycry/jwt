@@ -102,7 +102,9 @@ class JWT extends BaseConfig
 
     /**
      * Active validation constraints. Allowed values: 'SignedWith', 'IssuedBy',
-     * 'ValidAt' / 'LooseValidAt', 'IdentifiedBy', 'PermittedFor'.
+     * 'IdentifiedBy', 'PermittedFor', 'LooseValidAt', 'StrictValidAt'
+     * ('ValidAt' is a legacy alias for 'LooseValidAt'). See
+     * {@see \Daycry\JWT\Enums\ConstraintName}.
      *
      * @var list<string>
      */

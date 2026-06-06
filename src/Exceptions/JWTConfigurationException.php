@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Daycry\JWT\Exceptions;
 
+use Daycry\JWT\Enums\ConstraintName;
 use RuntimeException;
 use Throwable;
 
@@ -68,8 +69,10 @@ class JWTConfigurationException extends RuntimeException
     {
         return new self(sprintf(
             'Unknown validation constraint "%s" in Daycry\\JWT\\Config\\JWT::$validateClaims. '
-            . 'Allowed: SignedWith, IssuedBy, LooseValidAt, StrictValidAt, IdentifiedBy, PermittedFor.',
+            . 'Allowed: %s (legacy alias: %s).',
             $name,
+            implode(', ', ConstraintName::names()),
+            ConstraintName::ALIAS_VALID_AT,
         ));
     }
 }

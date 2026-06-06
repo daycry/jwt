@@ -7,10 +7,13 @@ namespace Daycry\JWT;
 use DateInterval;
 use DateTimeImmutable;
 use Daycry\JWT\Config\JWT as JWTConfig;
+use Daycry\JWT\Enums\AlgorithmType;
+use Daycry\JWT\Enums\ConstraintName;
 use Daycry\JWT\Exceptions\InvalidTokenException;
 use Daycry\JWT\Exceptions\JWTConfigurationException;
 use InvalidArgumentException;
 use Lcobucci\Clock\SystemClock;
+use Lcobucci\JWT\Builder;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Signer;
@@ -150,51 +153,15 @@ final class JWT
         $audience   = $this->requireClaim($this->config->audience, 'audience');
         $identifier = $this->requireClaim($this->config->identifier, 'identifier');
 
-        $builder          = $configuration->builder();
-        $serializedAsJson = false;
-        $splitDataHasUid  = false;
-
-        if (is_array($data) || is_object($data)) {
-            if ($this->split) {
-                /** @var iterable<string, mixed> $iterable */
-                $iterable = is_object($data) ? get_object_vars($data) : $data;
-
-                foreach ($iterable as $key => $value) {
-                    $claimName = (string) $key;
-                    if ($claimName === 'uid') {
-                        $splitDataHasUid = true;
-                    }
-
-                    try {
-                        $builder = $builder->withClaim($claimName, $value);
-                    } catch (RegisteredClaimGiven $e) {
-                        // Turn lcobucci's raw error into a library exception that
-                        // names the offending key and points to compact mode.
-                        throw JWTConfigurationException::reservedClaimInSplitMode($claimName, $e);
-                    }
-                }
-            } else {
-                $builder = $builder->withClaim(
-                    $this->paramData,
-                    json_encode($data, JSON_THROW_ON_ERROR),
-                );
-                $serializedAsJson = true;
-            }
-        } else {
-            $builder = $builder->withClaim($this->paramData, $data);
-        }
+        $builder = $this->applyPayload($configuration->builder(), $data);
 
         $resolvedUid = $uid ?? $this->config->uid;
         if ($resolvedUid !== null && $resolvedUid !== '') {
-            if ($splitDataHasUid) {
+            if ($this->split && $this->dataHasUidKey($data)) {
                 // The framework-owned uid claim overwrites a same-named split key.
                 $this->logUidCollisionWarning();
             }
             $builder = $builder->withClaim('uid', $resolvedUid);
-        }
-
-        if ($serializedAsJson) {
-            $builder = $builder->withHeader('cty', 'json');
         }
 
         $notBefore = $this->applyModifier($now, $this->config->canOnlyBeUsedAfter, 'canOnlyBeUsedAfter');
@@ -385,6 +352,62 @@ final class JWT
         return $parsed instanceof Plain ? $parsed : null;
     }
 
+    /**
+     * Write the user payload onto the builder according to the split/compact mode.
+     */
+    private function applyPayload(Builder $builder, mixed $data): Builder
+    {
+        if (is_array($data) || is_object($data)) {
+            if ($this->split) {
+                return $this->applySplitPayload($builder, $data);
+            }
+
+            // Compact mode: nest the payload as JSON under the paramData claim and
+            // tag cty=json so getPayload() can auto-decode it.
+            return $builder
+                ->withClaim($this->paramData, json_encode($data, JSON_THROW_ON_ERROR))
+                ->withHeader('cty', 'json');
+        }
+
+        return $builder->withClaim($this->paramData, $data);
+    }
+
+    /**
+     * @param array<array-key, mixed>|object $data
+     */
+    private function applySplitPayload(Builder $builder, array|object $data): Builder
+    {
+        /** @var iterable<string, mixed> $iterable */
+        $iterable = is_object($data) ? get_object_vars($data) : $data;
+
+        foreach ($iterable as $key => $value) {
+            $claimName = (string) $key;
+
+            try {
+                $builder = $builder->withClaim($claimName, $value);
+            } catch (RegisteredClaimGiven $e) {
+                // Turn lcobucci's raw error into a library exception that names the
+                // offending key and points to compact mode.
+                throw JWTConfigurationException::reservedClaimInSplitMode($claimName, $e);
+            }
+        }
+
+        return $builder;
+    }
+
+    private function dataHasUidKey(mixed $data): bool
+    {
+        if (is_array($data)) {
+            return array_key_exists('uid', $data);
+        }
+
+        if (is_object($data)) {
+            return array_key_exists('uid', get_object_vars($data));
+        }
+
+        return false;
+    }
+
     private function buildConfiguration(): Configuration
     {
         // Memoize the stateless signer + key configuration for this immutable
@@ -395,16 +418,17 @@ final class JWT
         // the first build. This caches only the key material — the time-dependent
         // LooseValidAt / StrictValidAt constraints are deliberately rebuilt per
         // call (see buildValidationConstraints()).
-        return $this->configuration ??= match ($this->config->algorithmType) {
-            'symmetric'  => $this->buildSymmetricConfiguration(),
-            'asymmetric' => $this->buildAsymmetricConfiguration(),
-            default      => throw JWTConfigurationException::invalidAlgorithmType($this->config->algorithmType),
+        return $this->configuration ??= match (AlgorithmType::tryFrom($this->config->algorithmType)) {
+            AlgorithmType::Symmetric  => $this->buildSymmetricConfiguration(),
+            AlgorithmType::Asymmetric => $this->buildAsymmetricConfiguration(),
+            default                   => throw JWTConfigurationException::invalidAlgorithmType($this->config->algorithmType),
         };
     }
 
     private function buildSymmetricConfiguration(): Configuration
     {
-        if ($this->config->signer === null || $this->config->signer === '') {
+        $secret = $this->config->signer;
+        if ($secret === null || $secret === '') {
             throw JWTConfigurationException::missingSigner();
         }
 
@@ -415,18 +439,14 @@ final class JWT
 
         return Configuration::forSymmetricSigner(
             $signer,
-            InMemory::base64Encoded($this->config->signer),
+            InMemory::base64Encoded($secret),
         );
     }
 
     private function buildAsymmetricConfiguration(): Configuration
     {
-        if ($this->config->signingKey === null || $this->config->signingKey === '') {
-            throw JWTConfigurationException::missingClaim('signingKey');
-        }
-        if ($this->config->verifyingKey === null || $this->config->verifyingKey === '') {
-            throw JWTConfigurationException::missingClaim('verifyingKey');
-        }
+        $signingKey   = $this->requireClaim($this->config->signingKey, 'signingKey');
+        $verifyingKey = $this->requireClaim($this->config->verifyingKey, 'verifyingKey');
 
         $signer = $this->buildSigner();
         if (! $signer instanceof OpenSSL) {
@@ -435,8 +455,8 @@ final class JWT
 
         return Configuration::forAsymmetricSigner(
             $signer,
-            $this->loadKey($this->config->signingKey, $this->config->passphrase ?? ''),
-            $this->loadKey($this->config->verifyingKey, ''),
+            $this->loadKey($signingKey, $this->config->passphrase ?? ''),
+            $this->loadKey($verifyingKey, ''),
         );
     }
 
@@ -465,33 +485,35 @@ final class JWT
      */
     private function buildValidationConstraints(): array
     {
-        if (! in_array('SignedWith', $this->config->validateClaims, true)) {
+        if (! in_array(ConstraintName::SignedWith->value, $this->config->validateClaims, true)) {
             throw JWTConfigurationException::missingSignatureConstraint();
         }
 
         $constraints = [];
 
         foreach ($this->config->validateClaims as $name) {
-            $constraints[] = match ($name) {
-                'SignedWith' => $this->buildSignedWithConstraint(),
-                'IssuedBy'   => new IssuedBy(
+            $constraint = ConstraintName::fromName($name)
+                ?? throw JWTConfigurationException::unknownConstraint($name);
+
+            $constraints[] = match ($constraint) {
+                ConstraintName::SignedWith => $this->buildSignedWithConstraint(),
+                ConstraintName::IssuedBy   => new IssuedBy(
                     $this->requireClaim($this->config->issuer, 'issuer'),
                 ),
-                'IdentifiedBy' => new IdentifiedBy(
+                ConstraintName::IdentifiedBy => new IdentifiedBy(
                     $this->requireClaim($this->config->identifier, 'identifier'),
                 ),
-                'PermittedFor' => new PermittedFor(
+                ConstraintName::PermittedFor => new PermittedFor(
                     $this->requireClaim($this->config->audience, 'audience'),
                 ),
-                'StrictValidAt' => new StrictValidAt(
+                ConstraintName::StrictValidAt => new StrictValidAt(
                     SystemClock::fromUTC(),
                     $this->buildLeewayInterval(),
                 ),
-                'ValidAt', 'LooseValidAt' => new LooseValidAt(
+                ConstraintName::LooseValidAt => new LooseValidAt(
                     SystemClock::fromUTC(),
                     $this->buildLeewayInterval(),
                 ),
-                default => throw JWTConfigurationException::unknownConstraint($name),
             };
         }
 
@@ -530,21 +552,24 @@ final class JWT
         try {
             $result = $base->modify($modifier);
         } catch (Throwable $e) {
-            throw new InvalidArgumentException(
-                "Config::\${$name} is not a valid DateTimeImmutable modifier: \"{$modifier}\".",
-                0,
-                $e,
-            );
+            throw $this->invalidModifier($name, $modifier, $e);
         }
 
         // PHP < 8.3 returns false instead of throwing on an invalid modifier.
         if ($result === false) {
-            throw new InvalidArgumentException(
-                "Config::\${$name} is not a valid DateTimeImmutable modifier: \"{$modifier}\".",
-            );
+            throw $this->invalidModifier($name, $modifier);
         }
 
         return $result;
+    }
+
+    private function invalidModifier(string $name, string $modifier, ?Throwable $previous = null): InvalidArgumentException
+    {
+        return new InvalidArgumentException(
+            "Config::\${$name} is not a valid DateTimeImmutable modifier: \"{$modifier}\".",
+            0,
+            $previous,
+        );
     }
 
     private function buildLeewayInterval(): ?DateInterval

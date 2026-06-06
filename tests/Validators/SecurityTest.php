@@ -539,8 +539,8 @@ final class SecurityTest extends CIUnitTestCase
         $token = $jwt->encode('payload');
 
         // Token-level failures (tampered / malformed) stay swallowed.
-        $this->assertNull($jwt->tryDecode($this->mutateSignature($token)));
-        $this->assertNull($jwt->tryDecode('not-a-jwt'));
+        $this->assertNotInstanceOf(Plain::class, $jwt->tryDecode($this->mutateSignature($token)));
+        $this->assertNotInstanceOf(Plain::class, $jwt->tryDecode('not-a-jwt'));
     }
 
     public function testWithParamDataRejectsReservedClaimName(): void
@@ -569,7 +569,7 @@ final class SecurityTest extends CIUnitTestCase
         $this->assertTrue($jwt->isExpired($token));
         $this->assertSame(0, $jwt->getTimeToExpiry($token));
         $this->assertFalse($jwt->isValid($token));
-        $this->assertNull($jwt->tryDecode($token));
+        $this->assertNotInstanceOf(Plain::class, $jwt->tryDecode($token));
 
         $this->expectException(RequiredConstraintsViolated::class);
         $jwt->decode($token);
@@ -581,8 +581,8 @@ final class SecurityTest extends CIUnitTestCase
         $token = $jwt->withExpiresAt('-30 seconds')->encode('payload');
 
         // leeway 0 and leeway null both mean "no tolerance" → still expired.
-        $this->assertNull($jwt->withLeeway(0)->tryDecode($token));
-        $this->assertNull($jwt->withLeeway(null)->tryDecode($token));
+        $this->assertNotInstanceOf(Plain::class, $jwt->withLeeway(0)->tryDecode($token));
+        $this->assertNotInstanceOf(Plain::class, $jwt->withLeeway(null)->tryDecode($token));
 
         // A 5-minute leeway must accept a token that expired 30s ago — this is
         // the only assertion that proves the DateInterval is wired into LooseValidAt
@@ -659,12 +659,13 @@ final class SecurityTest extends CIUnitTestCase
 
     private function encodeTokenWithoutExpiry(string $data): string
     {
-        $configuration = $this->symmetricTestConfiguration();
+        $configuration                    = $this->symmetricTestConfiguration();
+        [$issuer, $audience, $identifier] = $this->requiredClaims();
 
         return $configuration->builder()
-            ->issuedBy((string) $this->config->issuer)
-            ->permittedFor((string) $this->config->audience)
-            ->identifiedBy((string) $this->config->identifier)
+            ->issuedBy($issuer)
+            ->permittedFor($audience)
+            ->identifiedBy($identifier)
             ->issuedAt(new DateTimeImmutable())
             ->withClaim('data', $data)
             ->getToken($configuration->signer(), $configuration->signingKey())
@@ -680,13 +681,14 @@ final class SecurityTest extends CIUnitTestCase
         ?DateTimeImmutable $notBefore = null,
         ?DateTimeImmutable $expiresAt = null,
     ): string {
-        $configuration = $this->symmetricTestConfiguration();
-        $now           = new DateTimeImmutable();
+        $configuration                    = $this->symmetricTestConfiguration();
+        [$issuer, $audience, $identifier] = $this->requiredClaims();
+        $now                              = new DateTimeImmutable();
 
         $builder = $configuration->builder()
-            ->issuedBy((string) $this->config->issuer)
-            ->permittedFor((string) $this->config->audience)
-            ->identifiedBy((string) $this->config->identifier)
+            ->issuedBy($issuer)
+            ->permittedFor($audience)
+            ->identifiedBy($identifier)
             ->issuedAt($issuedAt ?? $now)
             ->withClaim('data', 'payload');
 
@@ -722,6 +724,26 @@ final class SecurityTest extends CIUnitTestCase
             new \Lcobucci\JWT\Signer\Hmac\Sha256(),
             InMemory::base64Encoded($signer),
         );
+    }
+
+    /**
+     * @return array{non-empty-string, non-empty-string, non-empty-string} issuer, audience, identifier
+     */
+    private function requiredClaims(): array
+    {
+        $issuer     = $this->config->issuer;
+        $audience   = $this->config->audience;
+        $identifier = $this->config->identifier;
+
+        if (
+            $issuer === null || $issuer === ''
+                             || $audience === null || $audience === ''
+                             || $identifier === null || $identifier === ''
+        ) {
+            $this->fail('JWT test config is incomplete.');
+        }
+
+        return [$issuer, $audience, $identifier];
     }
 
     private function mutateSignature(string $token): string
