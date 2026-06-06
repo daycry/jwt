@@ -561,7 +561,148 @@ final class SecurityTest extends CIUnitTestCase
         $jwt->encode(['iss' => 'evil', 'role' => 'admin']);
     }
 
+    public function testDecodeRejectsExpiredToken(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->withExpiresAt('-1 hour')->encode('payload');
+
+        $this->assertTrue($jwt->isExpired($token));
+        $this->assertSame(0, $jwt->getTimeToExpiry($token));
+        $this->assertFalse($jwt->isValid($token));
+        $this->assertNull($jwt->tryDecode($token));
+
+        $this->expectException(RequiredConstraintsViolated::class);
+        $jwt->decode($token);
+    }
+
+    public function testExpiredTokenIsRejectedWithoutLeewayButAcceptedWithin(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->withExpiresAt('-30 seconds')->encode('payload');
+
+        // leeway 0 and leeway null both mean "no tolerance" → still expired.
+        $this->assertNull($jwt->withLeeway(0)->tryDecode($token));
+        $this->assertNull($jwt->withLeeway(null)->tryDecode($token));
+
+        // A 5-minute leeway must accept a token that expired 30s ago — this is
+        // the only assertion that proves the DateInterval is wired into LooseValidAt
+        // (PT300S, not null/wrong magnitude).
+        $decoded = $jwt->withLeeway(300)->decode($token);
+        $this->assertSame('payload', $decoded->claims()->get('data'));
+    }
+
+    public function testFutureNotBeforeIsRejected(): void
+    {
+        $now   = new DateTimeImmutable();
+        $token = $this->handBuildToken($now, $now->modify('+1 hour'), $now->modify('+2 hours'));
+        $jwt   = new JWT($this->config);
+
+        $this->expectException(RequiredConstraintsViolated::class);
+        $jwt->decode($token);
+    }
+
+    public function testFutureNotBeforeIsAcceptedWithLargeLeeway(): void
+    {
+        $now   = new DateTimeImmutable();
+        $token = $this->handBuildToken($now, $now->modify('+1 hour'), $now->modify('+2 hours'));
+
+        $decoded = (new JWT($this->config))->withLeeway(7200)->decode($token);
+        $this->assertSame('payload', $decoded->claims()->get('data'));
+    }
+
+    public function testStrictValidAtRejectsTokenMissingTimeClaims(): void
+    {
+        $token = $this->encodeTokenWithoutExpiry('payload');
+
+        $this->config->validateClaims = ['SignedWith', 'StrictValidAt'];
+        $strict                       = new JWT($this->config);
+
+        $this->expectException(RequiredConstraintsViolated::class);
+        $strict->decode($token);
+    }
+
+    public function testLooseValidAtAcceptsTokenMissingTimeClaims(): void
+    {
+        $token = $this->encodeTokenWithoutExpiry('payload');
+
+        $this->config->validateClaims = ['SignedWith', 'LooseValidAt'];
+        $loose                        = new JWT($this->config);
+
+        $this->assertSame('payload', $loose->decode($token)->claims()->get('data'));
+    }
+
+    public function testTamperedPayloadFailsValidation(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload', 'original-user');
+
+        $this->expectException(RequiredConstraintsViolated::class);
+        $jwt->decode($this->mutatePayload($token));
+    }
+
+    public function testEmptyStringUidIsOmitted(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload', '');
+
+        $this->assertFalse($jwt->decode($token)->claims()->has('uid'));
+    }
+
+    public function testGetPayloadDecodesCompactArrayUnderCustomParamData(): void
+    {
+        $jwt   = (new JWT($this->config))->withParamData('payload');
+        $data  = ['a' => 1, 'b' => 'two'];
+        $token = $jwt->encode($data);
+
+        $this->assertSame($data, $jwt->getPayload($token));
+    }
+
     private function encodeTokenWithoutExpiry(string $data): string
+    {
+        $configuration = $this->symmetricTestConfiguration();
+
+        return $configuration->builder()
+            ->issuedBy((string) $this->config->issuer)
+            ->permittedFor((string) $this->config->audience)
+            ->identifiedBy((string) $this->config->identifier)
+            ->issuedAt(new DateTimeImmutable())
+            ->withClaim('data', $data)
+            ->getToken($configuration->signer(), $configuration->signingKey())
+            ->toString();
+    }
+
+    /**
+     * Hand-build a signed token with explicit time claims, bypassing encode()'s
+     * future-`nbf` clamp so decode()'s time constraints can be exercised directly.
+     */
+    private function handBuildToken(
+        ?DateTimeImmutable $issuedAt = null,
+        ?DateTimeImmutable $notBefore = null,
+        ?DateTimeImmutable $expiresAt = null,
+    ): string {
+        $configuration = $this->symmetricTestConfiguration();
+        $now           = new DateTimeImmutable();
+
+        $builder = $configuration->builder()
+            ->issuedBy((string) $this->config->issuer)
+            ->permittedFor((string) $this->config->audience)
+            ->identifiedBy((string) $this->config->identifier)
+            ->issuedAt($issuedAt ?? $now)
+            ->withClaim('data', 'payload');
+
+        if ($notBefore instanceof DateTimeImmutable) {
+            $builder = $builder->canOnlyBeUsedAfter($notBefore);
+        }
+        if ($expiresAt instanceof DateTimeImmutable) {
+            $builder = $builder->expiresAt($expiresAt);
+        }
+
+        return $builder
+            ->getToken($configuration->signer(), $configuration->signingKey())
+            ->toString();
+    }
+
+    private function symmetricTestConfiguration(): Configuration
     {
         $signer     = $this->config->signer;
         $issuer     = $this->config->issuer;
@@ -577,19 +718,10 @@ final class SecurityTest extends CIUnitTestCase
             $this->fail('JWT test config is incomplete.');
         }
 
-        $configuration = Configuration::forSymmetricSigner(
+        return Configuration::forSymmetricSigner(
             new \Lcobucci\JWT\Signer\Hmac\Sha256(),
             InMemory::base64Encoded($signer),
         );
-
-        return $configuration->builder()
-            ->issuedBy($issuer)
-            ->permittedFor($audience)
-            ->identifiedBy($identifier)
-            ->issuedAt(new DateTimeImmutable())
-            ->withClaim('data', $data)
-            ->getToken($configuration->signer(), $configuration->signingKey())
-            ->toString();
     }
 
     private function mutateSignature(string $token): string
@@ -597,6 +729,20 @@ final class SecurityTest extends CIUnitTestCase
         $segments    = explode('.', $token);
         $first       = $segments[2][0];
         $segments[2] = ($first === 'X' ? 'Y' : 'X') . substr($segments[2], 1);
+
+        return implode('.', $segments);
+    }
+
+    /**
+     * Tamper with a claim in the payload segment without re-signing, so the
+     * signature no longer matches the modified body.
+     */
+    private function mutatePayload(string $token): string
+    {
+        $segments       = explode('.', $token);
+        $payload        = json_decode((string) base64_decode(strtr($segments[1], '-_', '+/'), true), true);
+        $payload['uid'] = 'tampered-admin';
+        $segments[1]    = rtrim(strtr(base64_encode((string) json_encode($payload)), '+/', '-_'), '=');
 
         return implode('.', $segments);
     }

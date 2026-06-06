@@ -12,6 +12,7 @@ use Lcobucci\JWT\Signer\Ecdsa\Sha256 as EcdsaSha256;
 use Lcobucci\JWT\Signer\Rsa\Sha256 as RsaSha256;
 use Lcobucci\JWT\Token\Plain;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
+use Throwable;
 
 /**
  * @internal
@@ -60,13 +61,13 @@ final class AsymmetricTest extends CIUnitTestCase
         parent::tearDown();
     }
 
-    private function generateRsaKeyPair(string $name = 'rsa'): array
+    private function generateRsaKeyPair(string $name = 'rsa', ?string $passphrase = null): array
     {
         $resource = openssl_pkey_new([
             'private_key_type' => OPENSSL_KEYTYPE_RSA,
             'private_key_bits' => 2048,
         ]);
-        openssl_pkey_export($resource, $privatePem);
+        openssl_pkey_export($resource, $privatePem, $passphrase);
         $publicPem = openssl_pkey_get_details($resource)['key'];
 
         $unique      = $name . '-' . uniqid('', true);
@@ -176,5 +177,54 @@ final class AsymmetricTest extends CIUnitTestCase
 
         $this->expectException(RequiredConstraintsViolated::class);
         (new JWT($verifierConfig))->decode($token);
+    }
+
+    public function testEncryptedPrivateKeyRoundTripWithPassphrase(): void
+    {
+        $passphrase         = 'super-secret-pass';
+        [$private, $public] = $this->generateRsaKeyPair('enc', $passphrase);
+
+        $config             = $this->buildAsymmetricConfig(RsaSha256::class, $private, $public);
+        $config->passphrase = $passphrase;
+        $jwt                = new JWT($config);
+
+        $token = $jwt->encode('admin');
+        $this->assertSame('admin', $jwt->decode($token)->claims()->get('data'));
+    }
+
+    public function testEncryptedPrivateKeyWithWrongPassphraseThrows(): void
+    {
+        [$private, $public] = $this->generateRsaKeyPair('enc', 'the-right-passphrase');
+
+        $config             = $this->buildAsymmetricConfig(RsaSha256::class, $private, $public);
+        $config->passphrase = 'the-wrong-passphrase';
+        $jwt                = new JWT($config);
+
+        $this->expectException(Throwable::class);
+        $jwt->encode('admin');
+    }
+
+    public function testRsaKeyWithEcdsaSignerThrows(): void
+    {
+        [$private, $public] = $this->generateRsaKeyPair();
+        $config             = $this->buildAsymmetricConfig(EcdsaSha256::class, $private, $public);
+        $jwt                = new JWT($config);
+
+        $this->expectException(Throwable::class);
+        $jwt->encode('admin');
+    }
+
+    public function testMalformedPrivateKeyThrows(): void
+    {
+        [, $public] = $this->generateRsaKeyPair();
+        $config     = $this->buildAsymmetricConfig(
+            RsaSha256::class,
+            "-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----",
+            $public,
+        );
+        $jwt = new JWT($config);
+
+        $this->expectException(Throwable::class);
+        $jwt->encode('admin');
     }
 }
