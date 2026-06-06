@@ -12,12 +12,15 @@ use Daycry\JWT\Exceptions\JWTConfigurationException;
 use InvalidArgumentException;
 use Lcobucci\Clock\SystemClock;
 use Lcobucci\JWT\Configuration;
+use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Signer;
 use Lcobucci\JWT\Signer\Hmac;
 use Lcobucci\JWT\Signer\Key;
 use Lcobucci\JWT\Signer\Key\InMemory;
 use Lcobucci\JWT\Signer\OpenSSL;
+use Lcobucci\JWT\Token\Parser;
 use Lcobucci\JWT\Token\Plain;
+use Lcobucci\JWT\Token\RegisteredClaimGiven;
 use Lcobucci\JWT\Validation\Constraint;
 use Lcobucci\JWT\Validation\Constraint\IdentifiedBy;
 use Lcobucci\JWT\Validation\Constraint\IssuedBy;
@@ -37,6 +40,15 @@ use Throwable;
  */
 final class JWT
 {
+    /**
+     * Claim names the facade manages itself. They cannot be reused as the
+     * compact-payload claim name (`withParamData()`); `uid` plus the registered
+     * JWT claims would otherwise be silently shadowed or rejected by lcobucci.
+     *
+     * @var list<string>
+     */
+    private const RESERVED_CLAIMS = ['uid', 'aud', 'exp', 'jti', 'iat', 'iss', 'nbf', 'sub'];
+
     private bool $split = false;
 
     /**
@@ -72,6 +84,12 @@ final class JWT
     {
         if ($name === '') {
             throw new InvalidArgumentException('paramData claim name cannot be empty.');
+        }
+        if (in_array($name, self::RESERVED_CLAIMS, true)) {
+            throw new InvalidArgumentException(sprintf(
+                'paramData claim name "%s" is reserved by the library; choose another name.',
+                $name,
+            ));
         }
         $clone            = clone $this;
         $clone->paramData = $name;
@@ -128,6 +146,7 @@ final class JWT
 
         $builder          = $configuration->builder();
         $serializedAsJson = false;
+        $splitDataHasUid  = false;
 
         if (is_array($data) || is_object($data)) {
             if ($this->split) {
@@ -135,7 +154,18 @@ final class JWT
                 $iterable = is_object($data) ? get_object_vars($data) : $data;
 
                 foreach ($iterable as $key => $value) {
-                    $builder = $builder->withClaim((string) $key, $value);
+                    $claimName = (string) $key;
+                    if ($claimName === 'uid') {
+                        $splitDataHasUid = true;
+                    }
+
+                    try {
+                        $builder = $builder->withClaim($claimName, $value);
+                    } catch (RegisteredClaimGiven $e) {
+                        // Turn lcobucci's raw error into a library exception that
+                        // names the offending key and points to compact mode.
+                        throw JWTConfigurationException::reservedClaimInSplitMode($claimName, $e);
+                    }
                 }
             } else {
                 $builder = $builder->withClaim(
@@ -150,6 +180,10 @@ final class JWT
 
         $resolvedUid = $uid ?? $this->config->uid;
         if ($resolvedUid !== null && $resolvedUid !== '') {
+            if ($splitDataHasUid) {
+                // The framework-owned uid claim overwrites a same-named split key.
+                $this->logUidCollisionWarning();
+            }
             $builder = $builder->withClaim('uid', $resolvedUid);
         }
 
@@ -186,6 +220,7 @@ final class JWT
      * Decode and validate. Always throws on parse errors and validation failures.
      *
      * @throws InvalidTokenException       When the token cannot be parsed.
+     * @throws JWTConfigurationException   When the library is misconfigured (bad signer/keys/constraints).
      * @throws RequiredConstraintsViolated When a constraint fails.
      */
     public function decode(string $token): Plain
@@ -212,13 +247,19 @@ final class JWT
     }
 
     /**
-     * Decode + validate without throwing. Returns null on any failure.
+     * Decode + validate without throwing on *token* failures (malformed token or
+     * a failed constraint) — those return null. A `JWTConfigurationException`
+     * (e.g. a misconfigured `$validateClaims`) is deliberately NOT swallowed: a
+     * library misconfiguration must surface loudly instead of masquerading as an
+     * invalid token, which would otherwise make every valid token look invalid.
+     *
+     * @throws JWTConfigurationException When the library itself is misconfigured.
      */
     public function tryDecode(string $token): ?Plain
     {
         try {
             return $this->decode($token);
-        } catch (Throwable) {
+        } catch (InvalidTokenException|RequiredConstraintsViolated) {
             return null;
         }
     }
@@ -245,11 +286,25 @@ final class JWT
         return $value;
     }
 
+    /**
+     * Full validity check: verifies the signature AND every configured claim.
+     *
+     * @throws JWTConfigurationException When the library is misconfigured.
+     */
     public function isValid(string $token): bool
     {
         return $this->tryDecode($token) instanceof Plain;
     }
 
+    /**
+     * Cheap pre-flight check of the `exp` claim.
+     *
+     * WARNING: this parses the token WITHOUT verifying its signature, so the
+     * `exp` value is attacker-controlled. Never use the result to drive an
+     * authentication or authorization decision — use `decode()`/`tryDecode()`/
+     * `isValid()` for that. Returns true for a token that cannot be parsed or
+     * has no `exp` claim is treated as not-expired (false).
+     */
     public function isExpired(string $token): bool
     {
         $parsed = $this->parseWithoutValidation($token);
@@ -265,6 +320,12 @@ final class JWT
         return $exp->getTimestamp() < time();
     }
 
+    /**
+     * Seconds until the `exp` claim, or null when unknown.
+     *
+     * WARNING: like `isExpired()`, this parses WITHOUT verifying the signature;
+     * the returned TTL is attacker-controlled and must not gate access decisions.
+     */
     public function getTimeToExpiry(string $token): ?int
     {
         $parsed = $this->parseWithoutValidation($token);
@@ -301,8 +362,16 @@ final class JWT
 
     private function parseWithoutValidation(string $token): ?Plain
     {
+        if ($token === '') {
+            return null;
+        }
+
+        // Use a key-less parser: inspection (isExpired/getTimeToExpiry/
+        // extractClaimsUnsafe) needs no signing config, so a configuration error
+        // must not be reinterpreted as "expired"/null. Only genuinely malformed
+        // input is swallowed here.
         try {
-            $parsed = $this->buildConfiguration()->parser()->parse($token);
+            $parsed = (new Parser(new JoseEncoder()))->parse($token);
         } catch (Throwable) {
             return null;
         }
@@ -473,14 +542,17 @@ final class JWT
         return new DateInterval('PT' . $this->leewaySeconds . 'S');
     }
 
+    private function logUidCollisionWarning(): void
+    {
+        $this->logWarning(
+            'Daycry\\JWT\\JWT::encode() in split mode: the framework "uid" claim '
+            . 'overwrote a same-named key in the payload data.',
+        );
+    }
+
     private function logUnsafeExtractionWarning(): void
     {
-        if (! function_exists('log_message')) {
-            return;
-        }
-
-        log_message(
-            'warning',
+        $this->logWarning(
             'Daycry\\JWT\\JWT::extractClaimsUnsafe() was called without setting '
             . 'Config\\JWT::$allowUnsafeExtraction = true. The token has not been validated.',
         );
@@ -488,14 +560,18 @@ final class JWT
 
     private function logValidationDisabledWarning(): void
     {
+        $this->logWarning(
+            'Daycry\\JWT\\JWT::decode() ran with Config\\JWT::$validate = false. '
+            . 'The token signature and registered claims were NOT verified.',
+        );
+    }
+
+    private function logWarning(string $message): void
+    {
         if (! function_exists('log_message')) {
             return;
         }
 
-        log_message(
-            'warning',
-            'Daycry\\JWT\\JWT::decode() ran with Config\\JWT::$validate = false. '
-            . 'The token signature and registered claims were NOT verified.',
-        );
+        log_message('warning', $message);
     }
 }

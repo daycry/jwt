@@ -507,6 +507,60 @@ final class SecurityTest extends CIUnitTestCase
         $this->assertNull($jwt->getTimeToExpiry($token));
     }
 
+    public function testTryDecodeRethrowsConfigurationError(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        // A valid token, but the verifier is misconfigured (no SignedWith).
+        // A config error must surface, not be masqueraded as an invalid token.
+        $this->config->validateClaims = ['IssuedBy', 'LooseValidAt'];
+        $verifier                     = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $verifier->tryDecode($token);
+    }
+
+    public function testIsValidRethrowsConfigurationError(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        $this->config->validateClaims = ['SignedWith', 'NotARealConstraint'];
+        $verifier                     = new JWT($this->config);
+
+        $this->expectException(JWTConfigurationException::class);
+        $verifier->isValid($token);
+    }
+
+    public function testTryDecodeStillReturnsNullForTokenFailures(): void
+    {
+        $jwt   = new JWT($this->config);
+        $token = $jwt->encode('payload');
+
+        // Token-level failures (tampered / malformed) stay swallowed.
+        $this->assertNull($jwt->tryDecode($this->mutateSignature($token)));
+        $this->assertNull($jwt->tryDecode('not-a-jwt'));
+    }
+
+    public function testWithParamDataRejectsReservedClaimName(): void
+    {
+        $jwt = new JWT($this->config);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('reserved');
+        $jwt->withParamData('uid');
+    }
+
+    public function testSplitModeRejectsRegisteredClaimWithConfigException(): void
+    {
+        $jwt = (new JWT($this->config))->withSplitData();
+
+        $this->expectException(JWTConfigurationException::class);
+        $this->expectExceptionMessage('reserved JWT claim');
+        $jwt->encode(['iss' => 'evil', 'role' => 'admin']);
+    }
+
     private function encodeTokenWithoutExpiry(string $data): string
     {
         $signer     = $this->config->signer;

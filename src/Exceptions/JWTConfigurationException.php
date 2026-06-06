@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Daycry\JWT\Exceptions;
 
 use RuntimeException;
+use Throwable;
 
 class JWTConfigurationException extends RuntimeException
 {
@@ -51,6 +52,16 @@ class JWTConfigurationException extends RuntimeException
             $signerClass,
             $algorithmType,
         ));
+    }
+
+    public static function reservedClaimInSplitMode(string $name, ?Throwable $previous = null): self
+    {
+        return new self(sprintf(
+            'Cannot split a "%s" key into the token: it is a reserved JWT claim '
+            . '(aud, exp, jti, iat, iss, nbf, sub). Rename the key, or use compact mode '
+            . '(the default, without withSplitData()) so the payload is nested under the data claim.',
+            $name,
+        ), 0, $previous);
     }
 
     public static function unknownConstraint(string $name): self
