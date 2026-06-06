@@ -125,6 +125,14 @@
       <code><![CDATA[config('JWT')]]></code>
     </UndefinedFunction>
   </file>
+  <file src="tests/Validators/ApiCustomisersTest.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[protected function setUp(): void]]></code>
+    </MissingOverrideAttribute>
+    <UndefinedFunction>
+      <code><![CDATA[config('JWT')]]></code>
+    </UndefinedFunction>
+  </file>
   <file src="tests/Validators/AsymmetricTest.php">
     <MissingOverrideAttribute>
       <code><![CDATA[protected function setUp(): void]]></code>
