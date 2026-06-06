@@ -76,8 +76,8 @@
         "psalm": "vendor/bin/psalm",
         "rector": "vendor/bin/rector process --dry-run",
         "rector:fix": "vendor/bin/rector process",
-        "cs-check": "php-cs-fixer fix --ansi --verbose --diff --dry-run",
-        "cs-fix": "php-cs-fixer fix --ansi --verbose --diff",
+        "cs-check": "vendor/bin/php-cs-fixer fix --ansi --verbose --diff --dry-run",
+        "cs-fix": "vendor/bin/php-cs-fixer fix --ansi --verbose --diff",
         "test": "vendor/bin/phpunit",
         "qa": [
             "@analyze",

@@ -77,4 +77,4 @@ These threats live outside the JWT specification. The library cannot mitigate th
 
 ## Reporting issues
 
-Security issues should not be filed as public GitHub issues. Follow [SECURITY.md](../SECURITY.md) for the private-disclosure path.
+Security issues should not be filed as public GitHub issues. Follow [SECURITY.md](https://github.com/daycry/jwt/blob/master/SECURITY.md) for the private-disclosure path.

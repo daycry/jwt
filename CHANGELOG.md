@@ -4,6 +4,24 @@ All notable changes to `daycry/jwt` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.2.0] — 2026-06-06
+
+### Added
+- **Key rotation (`kid`).** `Config\JWT::$keyId` writes a `kid` header on every issued token, and `Config\JWT::$verifyingKeys` (a `kid => key` map of PEM contents/paths or base64 secrets) selects the verification key by the token's `kid` on decode, falling back to the single `$verifyingKey` / `$signer`. The configured signer/algorithm is always used, so a token's `kid` can never downgrade the verifier. Per-instance override via `JWT::withKeyId()`.
+- **New immutable customisers:** `withIssuer()`, `withAudience(string ...$aud)` (multi-audience on encode), `withIdentifier()`, `withHeader()` / `withHeaders()` (the internal `cty` header is protected), and `withClaims()` (reserved claim names rejected).
+- **Validated reads:** `getClaims()` (the validated counterpart of `extractClaimsUnsafe()`) and `getClaim()`.
+- `JWTConfigurationException::reservedClaimInSplitMode()`; `Daycry\JWT\Enums\AlgorithmType` and `Daycry\JWT\Enums\ConstraintName` enums.
+- Published documentation site (MkDocs Material) at <https://daycry.github.io/jwt/>, built and deployed from `development` by `.github/workflows/docs.yml`.
+
+### Changed
+- `tryDecode()` / `isValid()` now only swallow **token** failures (`InvalidTokenException` / `RequiredConstraintsViolated`). A `JWTConfigurationException` (e.g. `validateClaims` missing `SignedWith`, or an unknown constraint) now propagates instead of masquerading as an invalid token — a misconfigured deployment no longer makes every valid token silently look invalid.
+- `isExpired()` / `getTimeToExpiry()` / `extractClaimsUnsafe()` parse with a key-less parser, so a signing-config error can no longer be reinterpreted as "expired"/`null`. Added security docblocks noting these helpers do **not** verify the signature.
+- `withParamData()` and `withClaims()` reject reserved claim names; split mode rethrows lcobucci's `RegisteredClaimGiven` as a descriptive `JWTConfigurationException`.
+- `jwt:key` now requires at least **32 bytes** (256-bit, the HS256 floor) and returns explicit exit codes; `jwt:keypair` validates `--curve` and suggests the matching ES256/384/512 signer.
+
+### Performance
+- The stateless signer + key `Configuration` is now memoized per instance, so `decode()` no longer rebuilds it twice (nor re-reads the asymmetric PEM from disk) per call. Time-dependent constraints are still rebuilt per call.
+
 ## [3.1.0] — 2026-06-02
 
 ### Added
@@ -23,7 +41,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Invalid `canOnlyBeUsedAfter` **and** `expiresAt` `DateTimeImmutable::modify()` strings now both throw `InvalidArgumentException` consistently, normalising the PHP 8.2 (returns `false`) and 8.3+ (throws) failure modes. A *valid* future `canOnlyBeUsedAfter` is still clamped to issuance time so freshly-issued tokens are immediately usable (intended).
 - `jwt:keypair`: on Windows the command now warns that `chmod()` cannot enforce file permissions (recommends restricting access via NTFS ACLs, e.g. `icacls`), and warns when `--passphrase` is passed on the command line because that value can leak via the process list and shell history.
 
-## [3.0.0] — TBD
+## [3.0.0] — 2026-05-08
 
 The 3.0 release rebuilds the library on top of `lcobucci/jwt 5`, hardens defaults, fixes several latent bugs, and introduces asymmetric (RSA / ECDSA) support. See [Migration v2 → v3](docs/migration-v2-to-v3.md) for the upgrade path.
 
@@ -91,6 +109,7 @@ First 2.x release.
 
 Earlier releases targeted `lcobucci/jwt ^4` and exposed the union-typed `decode()` API. They are no longer maintained — please upgrade to 3.x.
 
+[3.2.0]: https://github.com/daycry/jwt/releases/tag/v3.2.0
 [3.1.0]: https://github.com/daycry/jwt/releases/tag/v3.1.0
 [3.0.0]: https://github.com/daycry/jwt/releases/tag/v3.0.0
 [2.0.1]: https://github.com/daycry/jwt/releases/tag/v2.0.1

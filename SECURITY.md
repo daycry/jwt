@@ -4,8 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.x     | ✅        |
-| < 1.0   | ❌        |
+| 3.x     | ✅        |
+| 2.x     | ❌ (EOL — upgrade to 3.x) |
+| < 2.0   | ❌ (EOL — upgrade to 3.x) |
 
 ## Reporting a Vulnerability
 

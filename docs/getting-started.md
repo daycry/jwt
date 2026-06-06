@@ -69,10 +69,13 @@ $token = $jwt->encode('hello world');    // scalar payload
 // $token = $jwt->encode(['user_id' => 1, 'role' => 'admin'], 42);
 
 // --- Decoding ---
-$claims = $jwt->decode($token);
+$token0 = $jwt->decode($token);              // returns a Lcobucci\JWT\Token\Plain
 
-echo $claims->get('data');   // "hello world"
-echo $claims->get('uid');    // value from config or second encode() argument
+echo $token0->claims()->get('data');         // "hello world"
+echo $token0->claims()->get('uid');          // value from config or second encode() argument
+
+// Or read the original payload directly (auto-decodes compact JSON):
+echo $jwt->getPayload($token);               // "hello world"
 ```
 
 ---

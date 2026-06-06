@@ -203,6 +203,51 @@ $access = JWT::for()->withExpiresAt('+5 minutes')->encode($data);   // short-liv
 $refresh = JWT::for()->encode($data);                                // uses Config::$expiresAt
 ```
 
+### withIssuer / withAudience / withIdentifier (3.2.0)
+
+Per-instance overrides of the `iss` / `aud` / `jti` claims, applied to **both** encode and validate so the two stay symmetric. Each rejects an empty string. `withAudience()` is variadic — pass several audiences to write a multi-valued `aud` (validation requires the token to be permitted for the first one).
+
+```php
+$jwt = JWT::for()
+    ->withIssuer('https://api.my-app.com')
+    ->withAudience('https://app-a.com', 'https://app-b.com')
+    ->withIdentifier(bin2hex(random_bytes(16)));   // unique jti per token
+```
+
+### withClaims / withHeader / withHeaders (3.2.0)
+
+Add custom top-level claims or JOSE headers. Reserved claim names (`uid` and the registered claims) and the internal `cty` header are rejected to surface collisions early.
+
+```php
+$jwt = JWT::for()
+    ->withClaims(['scope' => 'admin', 'tenant' => 'acme'])
+    ->withHeader('x-trace-id', $traceId);
+```
+
+### withKeyId (3.2.0)
+
+Stamp the active key id as a `kid` header for [key rotation](advanced.md#key-rotation-with-kid). See the Advanced guide for the verifying-key map.
+
+```php
+$token = JWT::for()->withKeyId('2026-06')->encode($data);
+```
+
+---
+
+## Reading claims
+
+| Method | Returns | Validates? |
+|---|---|---|
+| `getPayload(string $token)` | `mixed` | ✅ Returns the original payload (auto-decodes compact JSON). |
+| `getClaims(string $token)` | `array` | ✅ All claims — the safe counterpart of `extractClaimsUnsafe()`. |
+| `getClaim(string $token, string $name)` | `mixed` | ✅ A single claim (`null` when absent). |
+| `extractClaimsUnsafe(string $token)` | `?array` | ❌ Parse only — logs a warning unless `allowUnsafeExtraction = true`. |
+
+```php
+$claims = $jwt->getClaims($token);          // ['data' => ..., 'uid' => ..., 'iss' => ...]
+$scope  = $jwt->getClaim($token, 'scope');  // validated single value
+```
+
 ---
 
 ## Validation constraints

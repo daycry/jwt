@@ -108,7 +108,7 @@ final class ApiCustomisersTest extends CIUnitTestCase
 
         $token = $jwt->encode('payload');
 
-        $this->assertInstanceOf(Plain::class, $jwt->decode($token));
+        $this->assertSame('payload', $jwt->decode($token)->claims()->get('data'));
     }
 
     public function testWithHeaderWritesCustomHeader(): void

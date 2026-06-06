@@ -68,7 +68,7 @@ tests/
 
 ## Test Configuration
 
-PHPUnit is configured in [`phpunit.xml.dist`](../phpunit.xml.dist) with:
+PHPUnit is configured in [`phpunit.xml.dist`](https://github.com/daycry/jwt/blob/master/phpunit.xml.dist) with:
 
 ```xml
 <env name="CI_ENVIRONMENT" value="testing"/>
@@ -112,40 +112,32 @@ Covers the core `JWT` class public API:
 | `testWithLeewayAcceptsNullToResetLeeway` | `withLeeway(null)` resets leeway to "no leeway" |
 | `testWithExpiresAtOverridesConfiguredLifetime` | `withExpiresAt()` overrides the configured token lifetime |
 
+### `tests/Validators/ApiCustomisersTest.php`
+
+Covers the 3.2.0 immutable customisers and validated reads: `withIssuer` / `withAudience` (multi-audience) / `withIdentifier`, `withKeyId` and `kid`-based key rotation, `withHeader` / `withClaims` (reserved-name rejection), and `getClaims()` / `getClaim()`.
+
 ### `tests/Performance/JWTPerformanceTest.php`
 
 | Test | What it verifies |
 |---|---|
-| `testLazyLoadingPerformance` | 100 `JWT` instantiations complete in < 100 ms |
-| `testConstraintsCaching` | Second `decode()` is faster than first (cache hit) |
-| `testFastValidationMethods` | `isValid()`, `isExpired()`, `getTimeToExpiry()` complete within time bounds |
+| `testInstantiationIsCheap` | Repeated `JWT` construction never errors (no wall-clock assertion) |
+| `testDecodeAndIsValidWork` | `decode()` and `isValid()` round-trip a freshly encoded token |
+| `testUnsafeExtraction` | `extractClaimsUnsafe()` returns the compact payload |
+| `testExpiryCheck` / `testTimeToExpiry` | `isExpired()` / `getTimeToExpiry()` behave on a fresh token |
 
 ### `tests/Commands/JWTGenerateKeyTest.php`
 
-Structural and logic tests using reflection — no actual `.env` or CLI side effects:
+CLI tests using `StreamFilterTrait` + reflection on `CLI::$options`; a sandboxed subclass redirects `.env` IO into a temp dir:
 
 | Test | What it verifies |
 |---|---|
-| `testKeyGeneration` | `random_bytes(32)` produces a 44-char Base64 string |
-| `testKeyLengthValidation` | 16/32/64 bytes produce expected Base64 lengths |
-| `testKeyUniqueness` | 10 consecutive keys are all different |
-| `testBase64Validation` | Generated key round-trips through base64_decode |
-| `testCommandClassExists` | Class exists, has `run()`, extends `BaseCommand` |
-| `testCommandInstantiation` | Properties (`group`, `name`, `description`) have expected values |
-| `testCommandWithShowOption` | `run()` accepts a single `$params` array |
-| `testPrivateMethodsViaReflection` | `displayKey` and `updateEnvFile` have correct signatures |
-
-### `tests/Commands/JWTGenerateKeyActualTest.php`
-
-Integration-style coverage that actually calls command code:
-
-| Test | What it verifies |
-|---|---|
-| `testCommandInstantiation` | Full constructor via real `Logger` + `Commands` instances |
-| `testRunMethodWithValidLength` | `run(['32', '--show'])` executes without fatal errors |
-| `testRunMethodWithInvalidLength` | `run(['8', '--show'])` exercises length validation error path |
-| `testRunMethodWithForceFlag` | `--force` flag code path is reached |
-| `testRunMethodWithDifferentLengths` | Lengths 16–64 all enter the key-generation branch |
+| `testShowOptionGeneratesValidBase64Key` | `--show` prints a valid Base64 key |
+| `testDefaultLengthIs32Bytes` / `testCustomLengthIsRespected` | Default and custom byte lengths |
+| `testRejectsLengthBelowMinimum` | Below the 32-byte floor → `EXIT_USER_INPUT` |
+| `testRejectsLengthAboveMaximum` | Above 128 bytes → `EXIT_USER_INPUT` |
+| `testEnvFileMissingShowsErrorAndExampleHint` / `testEnvFileMissingWithoutExample` | Missing `.env` handling |
+| `testAppendsKeyToEnvWhenMissing` / `testForceOverwritesExistingSigner` / `testTestingEnvironmentSkipsPromptOnExistingSigner` | Writing/overwriting `.env` |
+| `testCommandMetadata` | `group` / `name` / `description` / options |
 
 ### `tests/Commands/JWTPublishTest.php`
 

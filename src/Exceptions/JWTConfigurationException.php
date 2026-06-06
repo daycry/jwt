@@ -23,7 +23,7 @@ class JWTConfigurationException extends RuntimeException
     {
         return new self(
             "JWT \"{$name}\" is not configured. Set Daycry\\JWT\\Config\\JWT::\${$name} "
-            . "or the corresponding env variable \"jwt.{$name}\" before encoding tokens.",
+            . "or the corresponding env variable \"jwt.{$name}\" before encoding or decoding tokens.",
         );
     }
 

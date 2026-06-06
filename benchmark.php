@@ -18,19 +18,19 @@ class BenchmarkConfig extends JWTConfig
     public function __construct()
     {
         $this->uid = "benchmark_user";
-        $this->signer = 'mBC5v1sOKVvbdEitdSBenu59nfNfhwkedkJVNabosTw=';
+        // Generate a throwaway secret at runtime — never ship a real key in source.
+        $this->signer = base64_encode(random_bytes(32));
         $this->issuer = 'http://benchmark.local';
         $this->audience = 'http://benchmark.local';
         $this->identifier = 'bench123';
         $this->canOnlyBeUsedAfter = '+0 minute';
         $this->expiresAt = '+24 hour';
         $this->algorithm = \Lcobucci\JWT\Signer\Hmac\Sha256::class;
-        $this->throwable = true;
         $this->validate = true;
         $this->validateClaims = [
             'SignedWith',
-            'IssuedBy', 
-            'ValidAt',
+            'IssuedBy',
+            'LooseValidAt',
             'IdentifiedBy',
             'PermittedFor',
         ];
@@ -85,8 +85,8 @@ printf("⏱️  Total Time: %.4f seconds\n", $result['time']);
 printf("📊 Avg per encode: %.6f seconds\n", $result['avg_time']);
 printf("🧠 Memory used: %d bytes\n", $result['memory']);
 
-// Test 3: Token Decoding (with caching)
-echo "\n🔓 Test 3: Token Decoding (with caching)\n";
+// Test 3: Token Decoding
+echo "\n🔓 Test 3: Token Decoding\n";
 $token = $jwt->encode($testData);
 
 $result = benchmarkFunction(function() use ($jwt, $token) {

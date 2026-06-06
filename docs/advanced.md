@@ -4,6 +4,36 @@
 
 ---
 
+## Key rotation with `kid`
+
+*(3.2.0)* Rotate signing keys without invalidating tokens that are still in flight.
+
+The issuing side stamps each token with a `kid` header (`Config\JWT::$keyId` or `JWT::withKeyId()`). The verifying side keeps a `kid => key` map in `Config\JWT::$verifyingKeys`; on `decode()` the token's `kid` selects the matching key, falling back to the single `$verifyingKey` / `$signer` when the `kid` is absent or unknown.
+
+```php
+// Issuing side — stamp the active key id.
+$token = JWT::for()->withKeyId('2026-06')->encode($data);
+
+// Verifying side — app/Config/JWT.php
+public ?string $keyId         = '2026-06';                 // new tokens use this key
+public array   $verifyingKeys = [
+    '2026-05' => '/path/old-public.pem',                   // still accepted…
+    '2026-06' => '/path/new-public.pem',                   // …alongside the new one
+];
+```
+
+**Rotation workflow**
+
+1. Add the new key to `$verifyingKeys` and point `$keyId` (and `$signingKey`, for asymmetric) at it. Old tokens still verify against their `kid`.
+2. Wait until every token issued under the old key has expired.
+3. Remove the old entry from `$verifyingKeys`.
+
+If a key is **leaked**, remove it from `$verifyingKeys` immediately to revoke its tokens.
+
+> **Security note:** the configured signer/algorithm is always used regardless of the token's `kid`, so an attacker-chosen `kid` can never downgrade the verifier to a weaker algorithm. Values are PEM contents/paths for asymmetric, or base64 secrets for symmetric.
+
+---
+
 ## Utility Methods
 
 ### `tryDecode()`

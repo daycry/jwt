@@ -98,6 +98,28 @@ Set if the private key is encrypted. Used only when reading `$signingKey`. Leave
 
 ---
 
+## Key rotation (3.2.0)
+
+### `$keyId`
+
+Optional key identifier. When set, it is written as the `kid` header on every issued token so verifiers can pick the matching key during rotation. Defaults to `null` (no `kid` header). Override per instance with `JWT::withKeyId()`.
+
+### `$verifyingKeys`
+
+A `kid => key` map consulted on `decode()`: the token's `kid` header selects the matching verification key, falling back to the single `$verifyingKey` / `$signer` when the `kid` is absent or unknown. Values are PEM contents or paths for asymmetric algorithms, or base64 secrets for symmetric ones. The configured signer/algorithm is always used, so a token's `kid` can never downgrade the verifier.
+
+```php
+public ?string $keyId         = '2026-06';
+public array   $verifyingKeys = [
+    '2026-05' => '/path/old-public.pem',
+    '2026-06' => '/path/new-public.pem',
+];
+```
+
+See [Advanced → Key rotation](advanced.md#key-rotation-with-kid) for the full workflow.
+
+---
+
 ## Claims
 
 ### `$issuer` (`iss`)

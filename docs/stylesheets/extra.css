@@ -1,0 +1,22 @@
+/* ------------------------------------------------------------------ *
+ *  Daycry JWT — light polish on top of MkDocs Material.
+ * ------------------------------------------------------------------ */
+
+/* Feature/link cards: subtle lift + brand accent on hover. */
+.md-typeset .grid.cards > :is(ul, ol) > li,
+.md-typeset .grid.cards > .card {
+  border-radius: 0.7rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.md-typeset .grid.cards > :is(ul, ol) > li:hover,
+.md-typeset .grid.cards > .card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: var(--md-primary-fg-color);
+}
+
+/* Slightly tighter, more readable tables. */
+.md-typeset table:not([class]) th {
+  font-weight: 700;
+}

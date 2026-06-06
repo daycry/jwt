@@ -56,10 +56,10 @@ src/
 
 Design notes:
 
-- **Immutable instances.** `withSplitData()`, `withParamData()`, `withLeeway()`, `withExpiresAt()` return new instances — the original is never mutated.
-- **Always-validate.** `decode()` always throws on parse or validation failure. `tryDecode()` returns `?Plain` for non-throwing flows.
-- **Symmetric + asymmetric.** `Config\JWT::$algorithmType` toggles between HMAC (`signer`) and RSA/ECDSA (`signingKey` + `verifyingKey`).
-- **No global state, no caches.** Validation constraints are rebuilt per call; `LooseValidAt` always uses the current clock instead of a frozen one.
+- **Immutable instances.** `withSplitData()`, `withParamData()`, `withLeeway()`, `withExpiresAt()`, `withIssuer()`, `withAudience()`, `withIdentifier()`, `withKeyId()`, `withHeader()`, `withClaims()` return new instances — the original is never mutated.
+- **Always-validate.** `decode()` always throws on parse or validation failure. `tryDecode()` returns `?Plain` for non-throwing flows (a misconfiguration still throws).
+- **Symmetric + asymmetric.** `Config\JWT::$algorithmType` toggles between HMAC (`signer`) and RSA/ECDSA (`signingKey` + `verifyingKey`), with `kid`-based key rotation via `$verifyingKeys`.
+- **No stale clocks.** The time-dependent constraints (`LooseValidAt` / `StrictValidAt`) are rebuilt per call and always use the current clock — never a frozen one. Only the stateless signer/key `Configuration` is memoized per instance.
 
 ---
 
@@ -75,4 +75,4 @@ Design notes:
 
 ## License
 
-MIT — see [LICENSE](../LICENSE).
+MIT — see [LICENSE](https://github.com/daycry/jwt/blob/master/LICENSE).

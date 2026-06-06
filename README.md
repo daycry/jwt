@@ -1,6 +1,8 @@
 # JWT for CodeIgniter 4
 
-A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt ^5`](https://github.com/lcobucci/jwt). Supports HMAC, RSA and ECDSA.
+A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt ^5`](https://github.com/lcobucci/jwt). Supports HMAC, RSA and ECDSA, an immutable façade, and key rotation.
+
+> 📖 **Full documentation:** **<https://daycry.github.io/jwt/>** — this README is a quick overview; the site has the complete, searchable reference.
 
 ### Package
 [![Latest Stable Version](https://img.shields.io/packagist/v/daycry/jwt.svg?label=stable)](https://packagist.org/packages/daycry/jwt)
@@ -16,6 +18,7 @@ A JWT (JSON Web Token) library for CodeIgniter 4, built on top of [`lcobucci/jwt
 [![Rector](https://github.com/daycry/jwt/actions/workflows/rector.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/rector.yml)
 [![Code Style](https://github.com/daycry/jwt/actions/workflows/code-style.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/code-style.yml)
 [![CodeQL](https://github.com/daycry/jwt/actions/workflows/codeql.yml/badge.svg)](https://github.com/daycry/jwt/actions/workflows/codeql.yml)
+[![Docs](https://github.com/daycry/jwt/actions/workflows/docs.yml/badge.svg)](https://daycry.github.io/jwt/)
 [![Coverage Status](https://coveralls.io/repos/github/daycry/jwt/badge.svg?branch=master)](https://coveralls.io/github/daycry/jwt?branch=master)
 
 ### Community
@@ -178,6 +181,40 @@ $jwt = JWT::for()->withLeeway(null); // reset to no leeway
 
 `withLeeway()` accepts `null` to reset to "no leeway"; a negative value throws `InvalidArgumentException`.
 
+### Per-instance customisers (3.2.0)
+
+Every customiser returns a new instance, leaving the shared config untouched. Override claims, audiences, headers and extra claims per call:
+
+```php
+$jwt = JWT::for()
+    ->withIssuer('https://api.my-app.com')
+    ->withAudience('https://app-a.com', 'https://app-b.com') // multiple audiences
+    ->withIdentifier(bin2hex(random_bytes(16)))              // unique jti
+    ->withClaims(['scope' => 'admin'])                        // extra top-level claims
+    ->withHeader('x-trace', $traceId);                        // custom JOSE header
+
+$claims = $jwt->getClaims($token);            // validated array of all claims
+$scope  = $jwt->getClaim($token, 'scope');    // validated single claim
+```
+
+### Key rotation with `kid` (3.2.0)
+
+Tag issued tokens with a `kid` header and verify against a per-`kid` key map, so you can roll keys without invalidating tokens still in flight:
+
+```php
+// Issuing side — stamp the active key id.
+$token = JWT::for()->withKeyId('2026-06')->encode($data);
+
+// Verifying side (app/Config/JWT.php) — accept old and new keys during the window.
+public ?string $keyId        = '2026-06';
+public array   $verifyingKeys = [
+    '2026-05' => '/path/old-public.pem',
+    '2026-06' => '/path/new-public.pem',
+];
+```
+
+On decode, the token's `kid` selects the matching key from `$verifyingKeys` (falling back to `$verifyingKey` / `$signer`). The configured signer/algorithm is always used, so a token's `kid` can never downgrade the verifier.
+
 ---
 
 ## Error Handling
@@ -222,11 +259,13 @@ An invalid `jwt.canOnlyBeUsedAfter` or `jwt.expiresAt` modifier (anything `DateT
 | Method | Returns | Description |
 |---|---|---|
 | `decode(string $token)` | `Plain` | Validates and returns the parsed token. Throws on failure. |
-| `tryDecode(string $token)` | `?Plain` | Same as `decode()` but returns `null` on failure. |
+| `tryDecode(string $token)` | `?Plain` | Like `decode()` but returns `null` on a **token** failure. A `JWTConfigurationException` (misconfiguration) still propagates. |
 | `getPayload(string $token)` | `mixed` | Validates + returns the original payload (auto-decoded for compact mode). |
+| `getClaims(string $token)` | `array` | Validated array of all claims (the safe counterpart of `extractClaimsUnsafe()`). |
+| `getClaim(string $token, string $name)` | `mixed` | Validated single claim value (`null` when absent). |
 | `isValid(string $token)` | `bool` | True iff `tryDecode()` succeeds. |
-| `isExpired(string $token)` | `bool` | True for malformed tokens or tokens past `exp`. |
-| `getTimeToExpiry(string $token)` | `?int` | Seconds until `exp`, or `null`. |
+| `isExpired(string $token)` | `bool` | True for malformed/expired tokens. **Parses without verifying the signature** — never gate access on it. |
+| `getTimeToExpiry(string $token)` | `?int` | Seconds until `exp`, or `null`. **Does not verify the signature.** |
 | `extractClaimsUnsafe(string $token)` | `?array` | Claims **without validation**. Logs a warning unless `Config::$allowUnsafeExtraction = true`. |
 
 ---
@@ -253,11 +292,11 @@ php spark jwt:keypair --algorithm=ecdsa --curve=prime256v1 --output=writable/key
 
 ## Security Best Practices
 
-1. **Use a strong key** — at least 32 bytes (`php spark jwt:key`).
-2. **Set short expiry times** for API access tokens (`+15 minutes`).
-3. **Enable all validation constraints** in production.
-4. **Never commit** `.env` or any file containing `jwt.signer`.
-5. **Rotate the key** immediately if exposed — all outstanding tokens become invalid.
+1. **Use a strong key** — `php spark jwt:key` enforces a 32-byte (256-bit) minimum, the floor for HS256.
+2. **Set short expiry times** for API access tokens (`withExpiresAt('+15 minutes')`).
+3. **Enable all validation constraints** in production (keep `'SignedWith'` in `jwt.validateClaims`).
+4. **Never commit** `.env` or any file containing `jwt.signer` / private keys.
+5. **Rotate keys without downtime** using the `kid` header and `jwt.verifyingKeys` map (see [Key rotation](#key-rotation-with-kid-320)) — keep the old key in the map until its tokens have expired, then drop it. If a key is *leaked*, remove it from the map immediately to revoke its tokens.
 
 ---
 
@@ -273,16 +312,18 @@ vendor/bin/phpunit --no-coverage
 
 ## Documentation
 
-Full reference documentation is in the [`docs/`](docs/) folder:
+📖 **The full, searchable documentation is published at <https://daycry.github.io/jwt/>** (built with MkDocs Material from the [`docs/`](docs/) folder).
 
 | Document | Description |
 |---|---|
-| [Getting Started](docs/getting-started.md) | Installation and first token in minutes |
-| [Configuration](docs/configuration.md) | Every property, its type, default, and `.env` key |
-| [Usage](docs/usage.md) | Complete API reference with examples |
-| [CLI Commands](docs/commands.md) | `jwt:key` and `jwt:publish` reference |
-| [Advanced](docs/advanced.md) | Utility methods, middleware, multi-tenant patterns |
-| [Testing](docs/testing.md) | Test suite structure and writing new tests |
+| [Getting Started](https://daycry.github.io/jwt/getting-started/) | Installation and first token in minutes |
+| [Configuration](https://daycry.github.io/jwt/configuration/) | Every property, its type, default, and `.env` key |
+| [Usage](https://daycry.github.io/jwt/usage/) | Complete API reference with examples |
+| [Advanced](https://daycry.github.io/jwt/advanced/) | Utility methods, key rotation, middleware, multi-tenant patterns |
+| [CLI Commands](https://daycry.github.io/jwt/commands/) | `jwt:key`, `jwt:keypair`, `jwt:publish` reference |
+| [Threat Model](https://daycry.github.io/jwt/threat-model/) | Security model and guarantees |
+| [Testing](https://daycry.github.io/jwt/testing/) | Test suite structure and writing new tests |
+| [Migration v2 → v3](https://daycry.github.io/jwt/migration-v2-to-v3/) | Upgrade guide |
 
 ---
 
