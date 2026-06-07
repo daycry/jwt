@@ -42,7 +42,7 @@ jobs:
       - name: Build site (strict — fails on any broken link/anchor)
         run: mkdocs build --strict --site-dir site
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
